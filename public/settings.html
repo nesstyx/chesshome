@@ -46,6 +46,9 @@
           <button type="button" id="lang-btn-en" class="btn btn-ghost btn-sm lang-btn" onclick="setLang('en')">
             <span data-i18n="settings.lang_en">English</span>
           </button>
+          <button type="button" id="lang-btn-de" class="btn btn-ghost btn-sm lang-btn" onclick="setLang('de')">
+            <span>Deutsch</span>
+          </button>
         </div>
       </div>
     </div>
@@ -254,6 +257,7 @@ function updateLangButtons() {
   const cur = CH_I18N.getLang();
   document.getElementById('lang-btn-ru')?.classList.toggle('active', cur === 'ru');
   document.getElementById('lang-btn-en')?.classList.toggle('active', cur === 'en');
+  document.getElementById('lang-btn-de')?.classList.toggle('active', cur === 'de');
 }
 
 // apiGet/apiPost — глобальные, из /js/api.js (2А, унификация)

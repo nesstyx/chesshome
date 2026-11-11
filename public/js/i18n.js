@@ -6,6 +6,7 @@
 //      (хранится в localStorage под ключом ch_lang).
 //   2. Иначе смотрим язык системы/браузера (navigator.languages).
 //      Если там встречается "ru" — показываем русский.
+//      Если там встречается "de" — показываем немецкий.
 //      Во всех остальных случаях — английский по умолчанию.
 //
 //  Использование в HTML:
@@ -21,7 +22,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 (function () {
-  const SUPPORTED = ['ru', 'en'];
+  const SUPPORTED = ['ru', 'en', 'de'];
   const STORAGE_KEY = 'ch_lang';
   const FALLBACK_LANG = 'en';
 
@@ -35,8 +36,12 @@
       ? navigator.languages
       : [navigator.language || navigator.userLanguage || ''];
 
+    // Русский приоритетнее: если он есть среди языков браузера — берём его
     for (const l of navLangs) {
       if (l && l.toLowerCase().startsWith('ru')) return 'ru';
+    }
+    for (const l of navLangs) {
+      if (l && l.toLowerCase().startsWith('de')) return 'de';
     }
     return FALLBACK_LANG;
   }
@@ -74,6 +79,7 @@
   //  Категории:
   //   ru:  one / few / many   (1, 21, 31... | 2-4, 22-24... | 0,5-20,25-30...)
   //   en:  one / other        (1 | всё остальное)
+  //   de:  one / other        (как в английском)
   //  vars.n подставляется автоматически, если не передан явно в vars.
   function pluralCategory(n) {
     n = Math.abs(n);
