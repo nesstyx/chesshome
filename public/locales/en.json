@@ -443,6 +443,17 @@
       "demote": "Remove {username} from the administrator role?",
       "delete_club": "Delete the club? This action cannot be undone."
     },
+    "promote_warn": {
+      "title": "Make {username} an admin?",
+      "subtitle": "This is not a joke. An admin gets serious power over your club.",
+      "kick": "Can kick any regular member out of the club",
+      "chat": "Can mute and ban people in the club chat",
+      "edit": "Can edit the club description",
+      "tournaments": "Can create and manage club tournaments",
+      "note": "Only give admin rights to people you fully trust. You can take them back later, but the damage may already be done.",
+      "check": "I understand the risks and trust {username}",
+      "confirm": "Make admin"
+    },
     "toast": {
       "desc_updated": "Description updated",
       "joined": "You've joined the club!",

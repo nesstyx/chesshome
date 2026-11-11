@@ -454,6 +454,45 @@
     .ban-opt-btn:hover { border-color: var(--accent); background: rgba(201,168,76,0.08); }
     .ban-opt-btn.danger:hover { border-color: var(--red, #e74c3c); background: rgba(231,76,60,0.08); }
 
+    /* Promote-to-admin warning */
+    .promote-warn-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      z-index: 99999; display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(5px); animation: pwFade .15s ease;
+    }
+    @keyframes pwFade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes pwPop { from { opacity: 0; transform: translateY(12px) scale(.97); } to { opacity: 1; transform: none; } }
+    .promote-warn-box {
+      background: var(--bg-card); border: 1px solid rgba(231,76,60,0.45);
+      border-radius: 18px; padding: 26px 24px 22px; max-width: 440px; width: 92%;
+      box-shadow: 0 24px 70px rgba(0,0,0,0.55), 0 0 0 4px rgba(231,76,60,0.08);
+      animation: pwPop .2s ease;
+    }
+    .pw-icon {
+      width: 52px; height: 52px; border-radius: 50%; margin: 0 auto 14px;
+      display: flex; align-items: center; justify-content: center; font-size: 26px;
+      background: rgba(231,76,60,0.12); border: 1px solid rgba(231,76,60,0.35);
+    }
+    .promote-warn-box h3 { margin: 0 0 6px; font-size: 18px; text-align: center; }
+    .pw-sub { margin: 0 0 16px; font-size: 13px; line-height: 1.5; color: var(--text-secondary); text-align: center; }
+    .pw-list { list-style: none; margin: 0 0 14px; padding: 12px 14px; border-radius: 12px;
+      background: rgba(231,76,60,0.07); border: 1px solid rgba(231,76,60,0.22); }
+    .pw-list li { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.45;
+      color: var(--text-primary); padding: 4px 0; }
+    .pw-list li span:first-child { flex: none; }
+    .pw-note { font-size: 12px; line-height: 1.5; color: var(--text-muted); margin: 0 0 14px; text-align: center; }
+    .pw-check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; font-size: 13px;
+      line-height: 1.45; color: var(--text-primary); margin-bottom: 16px; user-select: none; }
+    .pw-check input { margin-top: 2px; accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
+    .pw-actions { display: flex; gap: 10px; }
+    .pw-actions button { flex: 1; padding: 11px 14px; border-radius: 10px; font-size: 14px; cursor: pointer;
+      font-family: var(--font-body); transition: all .15s; }
+    .pw-cancel { background: none; border: 1px solid var(--border); color: var(--text-muted); }
+    .pw-cancel:hover { color: var(--text-primary); border-color: var(--text-muted); }
+    .pw-confirm { background: var(--red, #e74c3c); border: 1px solid var(--red, #e74c3c); color: #fff; font-weight: 600; }
+    .pw-confirm:disabled { opacity: .35; cursor: not-allowed; }
+    .pw-confirm:not(:disabled):hover { filter: brightness(1.1); }
+
     /* Info tooltip */
     .chat-info-popup {
       position: absolute; top: 100%; right: 0; z-index: 999;
@@ -999,8 +1038,63 @@ async function kickUser(clubId, username) {
   } catch(e) { toast(e.message, 'error'); }
 }
 
+// Перевод с запасным английским текстом, если ключа ещё нет в i18n.js
+function trw(key, fallback, params) {
+  try {
+    const r = CH_I18N.t(key, params);
+    if (r && r !== key) return r;
+  } catch (e) {}
+  let out = fallback;
+  Object.keys(params || {}).forEach(k => { out = out.split('{' + k + '}').join(params[k]); });
+  return out;
+}
+
+// Предупреждение перед выдачей админки. Возвращает Promise<boolean>.
+function showPromoteWarning(username) {
+  return new Promise(resolve => {
+    document.getElementById('promote-warn-el')?.remove();
+    const u = escapeHtml(username);
+    const overlay = document.createElement('div');
+    overlay.className = 'promote-warn-overlay';
+    overlay.id = 'promote-warn-el';
+    overlay.innerHTML = `
+      <div class="promote-warn-box" role="dialog" aria-modal="true">
+        <div class="pw-icon">⚠️</div>
+        <h3>${trw('clubs.promote_warn.title', 'Make {username} an admin?', {username: u})}</h3>
+        <p class="pw-sub">${trw('clubs.promote_warn.subtitle', 'This is not a joke. An admin gets serious power over your club.', {})}</p>
+        <ul class="pw-list">
+          <li><span>🚪</span><span>${trw('clubs.promote_warn.kick', 'Can kick any regular member out of the club', {})}</span></li>
+          <li><span>🔇</span><span>${trw('clubs.promote_warn.chat', 'Can mute and ban people in the club chat', {})}</span></li>
+          <li><span>✏️</span><span>${trw('clubs.promote_warn.edit', 'Can edit the club description', {})}</span></li>
+          <li><span>🏆</span><span>${trw('clubs.promote_warn.tournaments', 'Can create and manage club tournaments', {})}</span></li>
+        </ul>
+        <p class="pw-note">${trw('clubs.promote_warn.note', 'Only give admin rights to people you fully trust. You can take them back later, but the damage may already be done.', {})}</p>
+        <label class="pw-check">
+          <input type="checkbox" id="pw-check">
+          <span>${trw('clubs.promote_warn.check', 'I understand the risks and trust {username}', {username: u})}</span>
+        </label>
+        <div class="pw-actions">
+          <button class="pw-cancel" id="pw-cancel">${trw('clubs.cancel_btn', 'Cancel', {})}</button>
+          <button class="pw-confirm" id="pw-confirm" disabled>${trw('clubs.promote_warn.confirm', 'Make admin', {})}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+
+    const chk = overlay.querySelector('#pw-check');
+    const ok  = overlay.querySelector('#pw-confirm');
+    const onKey = e => { if (e.key === 'Escape') done(false); };
+    const done = v => { document.removeEventListener('keydown', onKey); overlay.remove(); resolve(v); };
+
+    chk.onchange = () => { ok.disabled = !chk.checked; };
+    ok.onclick = () => { if (chk.checked) done(true); };
+    overlay.querySelector('#pw-cancel').onclick = () => done(false);
+    overlay.onclick = e => { if (e.target === overlay) done(false); };
+    document.addEventListener('keydown', onKey);
+  });
+}
+
 async function promoteUser(clubId, username) {
-  if (!confirm(CH_I18N.t('clubs.confirm.promote',{username}))) return;
+  if (!(await showPromoteWarning(username))) return;
   try {
     await apiPost('/clubs/' + clubId + '/promote', { username });
     toast(CH_I18N.t('clubs.toast.promoted',{username}), 'success');
