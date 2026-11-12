@@ -399,7 +399,7 @@ function bars(items, labelKey, valKey, colors) {
     const c   = Array.isArray(colors) ? colors[i % colors.length] : colors;
     return `<div class="bar-row">
       <div class="bar-row-head">
-        <span class="bar-row-label">${r[labelKey]||'—'}</span>
+        <span class="bar-row-label">${escapeHtml(r[labelKey]||'—')}</span>
         <span class="bar-row-val">${fmt(v)}</span>
       </div>
       <div class="bar-track">
@@ -415,7 +415,7 @@ function lb(items, valKey, suffix = '') {
   return items.map((it, i) => `
     <div class="lb-item">
       <div class="lb-pos">${medals[i]||i+1}</div>
-      <div class="lb-name">${it.username}</div>
+      <div class="lb-name">${escapeHtml(it.username)}</div>
       <div class="lb-val">${fmt(it[valKey]||0)}${suffix}</div>
     </div>`).join('');
 }
@@ -598,7 +598,7 @@ async function loadStats() {
         { icon:'🏆', text:T('stats.fact_games_per_user','На каждого игрока приходится <strong>{n}</strong> партий в среднем').replace('{n}', TOT.users ? (TOT.games / TOT.users * 2).toFixed(1) : 0) },
         { icon:'🧩', text:T('stats.fact_puzzle_attempts','Задач попытались решить <strong>{n}</strong> раз, из них успешно: <strong>{m}</strong>').replace('{n}', fmt(TOT.puzzleAttempts)).replace('{m}', fmt(TOT.puzzleSolved)) },
         { icon:'❤️', text:T('stats.fact_likes','В блоге поставлено <strong>{n}</strong> лайков на <strong>{m}</strong> статей').replace('{n}', fmt(TOT.blogLikes)).replace('{m}', fmt(TOT.blogPosts)) },
-        L.mostWins ? { icon:'🔥', text:T('stats.fact_most_wins','Больше всего побед у игрока <strong>{u}</strong> — <strong>{n}</strong>').replace('{u}', L.mostWins.username).replace('{n}', fmt(L.mostWins.wins)) } : null,
+        L.mostWins ? { icon:'🔥', text:T('stats.fact_most_wins','Больше всего побед у игрока <strong>{u}</strong> — <strong>{n}</strong>').replace('{u}', escapeHtml(L.mostWins.username)).replace('{n}', fmt(L.mostWins.wins)) } : null,
       ].filter(Boolean).map(f => `
         <div class="fact-card">
           <span class="fact-icon">${f.icon}</span>

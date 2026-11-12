@@ -1168,6 +1168,9 @@
         const isWhite = g.white === username;
         const outcome = resultKey(g, username); // 'win' | 'loss' | 'draw' — не зависит от языка
         const score = outcome === 'draw' ? 0.5 : outcome === 'win' ? 1 : 0;
+        // Товарищеские партии рейтинга не меняют — строка без дельты,
+        // текущее значение рейтинга не двигаем.
+        if (g.rated === false) { rows.push({ g, opponent: isWhite ? g.black : g.white, outcome, delta: 0, ratingNow: r, date: g.endedAt ? fmtDate(g.endedAt, { day: '2-digit', month: '2-digit' }) : '—' }); return; }
         const oppR = r + (score === 1 ? -20 : score === 0 ? 20 : 0);
         const exp = 1 / (1 + Math.pow(10, (oppR - r) / 400));
         const delta = Math.round(K * (score - exp));
@@ -1672,7 +1675,9 @@ window.loadActivity = loadActivity;
         if (games.length > 1) {
           let r = user.rating;
           const hist = [r];
-          const sorted = [...games].sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0));
+          // График строится только по рейтинговым партиям — товарищеские
+          // сдвигали ретроспективную кривую фиктивными дельтами.
+          const sorted = games.filter(g => g.rated !== false).sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0));
           sorted.slice(0, 99).forEach(g => {
             const isWhite = g.white === user.username;
             const score = g.result === 'draw' ? 0.5 : (g.result === (isWhite ? 'white' : 'black') ? 1 : 0);

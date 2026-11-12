@@ -2,6 +2,13 @@
 <html lang="ru">
 <head>
 <script src="/js/utils.js"></script>
+<script>
+  // Безопасная вставка строки в onclick-литерал (JS + HTML-атрибут)
+  function jsStr(s) {
+    return escapeHtml(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+  }
+</script>
+
 <script src="/js/toast.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -293,7 +300,7 @@ function render() {
           <div class="bl-row">
             <div class="bl-tag">
               ⛔ ${escapeHtml(u)}
-              <span class="bl-remove" onclick="removeFromBlacklist('${escapeHtml(u)}')">✕</span>
+              <span class="bl-remove" onclick="removeFromBlacklist('${jsStr(u)}')">✕</span>
             </div>
           </div>`).join('')}
       </div>
@@ -313,7 +320,7 @@ function render() {
           </div>
           <span class="p-score">${p.score} очков</span>
           <span style="font-size:12px;color:var(--text-muted)">${p.wins}W / ${p.draws}D / ${p.losses}L</span>
-          ${!p.anticheatBanned && !p.left ? `<button class="btn btn-secondary" style="padding:5px 12px;font-size:12px" onclick="kickParticipant('${escapeHtml(p.username)}')">Исключить</button>` : ''}
+          ${!p.anticheatBanned && !p.left ? `<button class="btn btn-secondary" style="padding:5px 12px;font-size:12px" onclick="kickParticipant('${jsStr(p.username)}')">Исключить</button>` : ''}
         </div>`).join('')}
     </div>
   `;

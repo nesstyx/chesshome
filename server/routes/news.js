@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/news.js — новости + загрузка обложек
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного routes.js в рамках рефакторинга.
-//  Код маршрутов не изменён — только обёртка-регистратор.
+// routes/news.js — новости + загрузка обложек
 
 const {
   jwt,
@@ -32,7 +28,7 @@ const moderation = require('../moderation');
 const multer  = require('multer');   // multipart/form-data для загрузки обложек новостей
 
 module.exports = function register(app) {
-app.get('/api/news', (req, res) => {
+app.get('/api/news', async (req, res) => {
   const { status, page: pQ, limit: lQ } = req.query;
   const page  = Math.max(0, parseInt(pQ) || 0);
   const limit = Math.min(50, parseInt(lQ) || 20);
@@ -58,6 +54,11 @@ app.get('/api/news', (req, res) => {
 
   if (status === 'drafts' || status === 'hidden') list.sort((a,b) => (b.updatedAt||b.createdAt) - (a.updatedAt||a.createdAt));
   else list.sort((a,b) => b.createdAt - a.createdAt);
+
+  // Публичный список не показывает статьи авторов в теневом бане
+  if (status !== 'drafts' && status !== 'hidden') {
+    list = await moderation.filterVisible(req, list, p => p.author);
+  }
 
   res.json({ posts: list.slice(page*limit, page*limit+limit).map(p => newsSanitize(p,false)), total: list.length });
 });
@@ -166,7 +167,7 @@ app.delete('/api/news/:id', newsAuthMiddleware, handleDeleteNewsPost);
 app.post('/api/news/:id/delete', newsAuthMiddleware, handleDeleteNewsPost);
 
 
-// ── Лайк / дизлайк (взаимоисключающие) ───────────────────────
+// Лайк / дизлайк (взаимоисключающие)
 app.post('/api/news/:id/like', newsAuthMiddleware, rateLimit(limiterStrict), async (req, res) => {
   const post = newsPosts.find(p => p.id === req.params.id);
   if (!post) return res.status(404).json({ error: 'Новость не найдена' });
@@ -225,7 +226,7 @@ app.post('/api/news/:id/dislike', newsAuthMiddleware, rateLimit(limiterStrict), 
 });
 
 
-// ── Авторы новостей (владелец) ───────────────────────────────
+// Авторы новостей (владелец)
 app.get('/api/news/authors', (req, res) => {
   res.json({ owner: NEWS_OWNER_USERNAME, authors: newsAuthors });
 });
@@ -314,6 +315,7 @@ app.post('/api/news/:id/comments', newsAuthMiddleware, rateLimit(limiterStrict),
 
   const ratKey = 'newscmt_' + user.username.toLowerCase();
   if (!global._newsCmtRate) global._newsCmtRate = new Map();
+  if (global._newsCmtRate.size >= 10000) global._newsCmtRate.delete(global._newsCmtRate.keys().next().value);
   const last = global._newsCmtRate.get(ratKey) || 0;
   if (Date.now() - last < 20000) return res.status(429).json({ error: 'Не так быстро! Подождите 20 секунд' });
   global._newsCmtRate.set(ratKey, Date.now());
@@ -375,14 +377,12 @@ app.post('/api/upload', newsAuthMiddleware, rateLimit(limiterStrict), (req, res)
 });
 
 
-// ── Clubs API ─────────────────────────────────────────────────
+// Clubs API
 
-// ══════════════════════════════════════════════════════════════
-//  NEWS API
-//  Контракт см. в комментарии наверху public/news.html.
-//  В отличие от блога, публиковать новости может не любой юзер, а
-//  только авторы, назначенные владельцем (username 'chesshome').
-// ══════════════════════════════════════════════════════════════
+// NEWS API
+// Контракт см. в комментарии наверху public/news.html.
+// В отличие от блога, публиковать новости может не любой юзер, а
+// только авторы, назначенные владельцем (username 'chesshome').
 function newsAuthMiddleware(req, res, next) {
   const auth = getAuthToken(req);
   if (!auth) return res.status(401).json({ error: 'Войдите, чтобы выполнить это действие' });
@@ -429,9 +429,7 @@ async function handleDeleteNewsPost(req, res) {
 }
 
 
-// ══════════════════════════════════════════════════════════════
-//  NEWS COMMENTS API
-// ══════════════════════════════════════════════════════════════
+// NEWS COMMENTS API
 async function getNewsCommentMute(postId, username) {
   const uname = username.toLowerCase();
   const r = await db('SELECT * FROM news_comment_mutes WHERE post_id=$1 AND username=$2',[postId,uname]);
@@ -461,7 +459,7 @@ async function handleDeleteNewsComment(req, res) {
 }
 
 
-// ── Загрузка изображений (обложки новостей) ──────────────────
+// Загрузка изображений (обложки новостей)
 const UPLOADS_DIR = path.join(__dirname, '../../public/uploads');
 
 try { fs.mkdirSync(UPLOADS_DIR, { recursive: true }); } catch (e) { console.error('[Upload] Не удалось создать папку uploads:', e.message); }

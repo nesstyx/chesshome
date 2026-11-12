@@ -865,7 +865,9 @@
 let socket = null;
 let currentUser = null;
 // Авторизация теперь через HttpOnly-cookie (ch_token), а не localStorage.
-const ADMINS = ['jwvc', 'Marina64']; // owners — имеют доступ ко всем чатам
+// Владельцы сайта — тот же список, что SITE_OWNERS на сервере (_shared.js);
+// сравнение регистронезависимое, ники хранятся в нижнем регистре.
+const ADMINS = ['chesshome', 'marina64'];
 const SYSTEM_SENDER = 'Система'; // системные сообщения от админа — читать можно, отвечать нельзя
 function isSystemPartner(name) { return !!name && name.toLowerCase() === SYSTEM_SENDER.toLowerCase(); }
 
@@ -971,7 +973,7 @@ function updateAuthUI() {
   if (!headerRight) return;
 
   if (currentUser) {
-    const isAdmin = currentUser.role === 'admin' || ADMINS.includes(currentUser.username);
+    const isAdmin = currentUser.role === 'admin' || ADMINS.includes(String(currentUser.username).toLowerCase());
 
     const wrap = document.createElement('div');
     wrap.className = 'user-menu';

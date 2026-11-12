@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/admin.js — админ-панель: роли, баны, VIP, значки, чат
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного routes.js в рамках рефакторинга.
-//  Код маршрутов не изменён — только обёртка-регистратор.
+// routes/admin.js — админ-панель: роли, баны, VIP, значки, чат
 
 const {
   db,
@@ -116,7 +112,7 @@ app.post('/api/admin/unban', authMiddleware, async (req, res) => {
 });
 
 
-// ── Теневой бан ─────────────────────────────────────────────────
+// Теневой бан
 // В отличие от /admin/ban: ничего не блокирует и не рвёт соединение —
 // цель продолжает пользоваться сайтом как обычно и не должна ничего
 // заподозрить. Единственный эффект — его сообщения (публичный чат и
@@ -132,6 +128,7 @@ app.post('/api/admin/shadowban', authMiddleware, async (req, res) => {
       target.shadowBanned = true;
       target.shadowBanReason = req.body.reason || 'Нарушение правил';
       await saveUser(target);
+      moderation.invalidateModSets();
       await logAdminAction(req.user.username, 'shadowban', target.username, { reason: target.shadowBanReason });
       res.json({ ok: true });
     } catch (e) {
@@ -149,6 +146,7 @@ app.post('/api/admin/unshadowban', authMiddleware, async (req, res) => {
       if (!target) return res.status(404).json({ error: 'Не найден' });
       target.shadowBanned = false; target.shadowBanReason = null;
       await saveUser(target);
+      moderation.invalidateModSets();
       await logAdminAction(req.user.username, 'unshadowban', target.username, {});
       res.json({ ok: true });
     } catch (e) {
@@ -159,7 +157,7 @@ app.post('/api/admin/unshadowban', authMiddleware, async (req, res) => {
 });
 
 
-// ── VIP-значок ──────────────────────────────────────────────────
+// VIP-значок
 // Выдают/снимают сайт-админы (requireVipGranter: роль 'admin' в БД либо
 // legacy-ники bootstrap — см. isVipGranter).
 app.post('/api/admin/vip/grant', authMiddleware, async (req, res) => {
@@ -203,7 +201,7 @@ app.post('/api/admin/vip/revoke', authMiddleware, async (req, res) => {
 });
 
 
-// ── Значки профиля (победитель сезона и т.п.) ─────────────────
+// Значки профиля (победитель сезона и т.п.)
 // Каталог значков лежит в core.js (USER_BADGES). Здесь только выдача/снятие.
 // Права — любой admin. Если нужно, как у VIP, только chesshome/Marina64 —
 // замените requireAdmin на requireVipGranter.
@@ -279,7 +277,11 @@ app.post('/api/admin/ipban', authMiddleware, async (req, res) => {
     bannedIPs.add(ip); await saveBanToDB(ip, target.createdDeviceId || null);
     if (target.createdDeviceId) bannedDevices.add(target.createdDeviceId);
 
-    const r = await db('SELECT * FROM users WHERE created_device_id = $1 AND role != $2', [target.createdDeviceId || '__none__', 'admin']);
+    // Баним «соседей» по устройству только при известном устройстве —
+    // служебная заглушка здесь собрала бы в бан все аккаунты без устройства.
+    const r = target.createdDeviceId
+      ? await db('SELECT * FROM users WHERE created_device_id = $1 AND role != $2', [target.createdDeviceId, 'admin'])
+      : { rows: [] };
     let count = 0;
     for (const row of r.rows) {
       const u = rowToUser(row);

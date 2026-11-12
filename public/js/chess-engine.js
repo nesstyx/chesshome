@@ -1,6 +1,4 @@
-// ════════════════════════════════════════════════════════════════
-//  Chess Home — Шахматная логика НА chess.js
-// ════════════════════════════════════════════════════════════════
+// Chess Home — Шахматная логика НА chess.js
 
 const ChessEngine = (() => {
 
@@ -8,7 +6,7 @@ const ChessEngine = (() => {
 
   const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
 
-  // ─── Координаты (чистые утилиты, без правил) ─────────────────
+  // Координаты (чистые утилиты, без правил)
   function squareToIndex(sq) {
     const f = sq.charCodeAt(0) - 97;
     const r = parseInt(sq[1]) - 1;
@@ -21,10 +19,8 @@ const ChessEngine = (() => {
     return String.fromCharCode(97 + f) + (r + 1);
   }
 
-  // rank()/file() УДАЛЕНЫ (3.6): экспортировались, но нигде не использовались.
   function opposite(color) { return color === WHITE ? BLACK : WHITE; }
 
-  // createState() УДАЛЕН (3.6): экспортировался, но не вызывался ни внутри,
   // ни снаружи — состояние создаётся через parseFEN().
 
   function deepClone(state) {
@@ -35,13 +31,14 @@ const ChessEngine = (() => {
       enPassant: state.enPassant,
       halfmove: state.halfmove,
       fullmove: state.fullmove,
+      initialFen: state.initialFen,
       history: [...state.history],
       capturedWhite: [...state.capturedWhite],
       capturedBlack: [...state.capturedBlack]
     };
   }
 
-  // ─── Мост в chess.js ─────────────────────────────────────────
+  // Мост в chess.js
   // Собираем FEN из полей состояния вручную: состояние может быть
   // построено снаружи (редактор позиций) и не обязано быть валидной
   // партией. chess.js валидирует позицию при загрузке — это и есть
@@ -108,6 +105,7 @@ const ChessEngine = (() => {
       enPassant: parts[3] && parts[3] !== '-' ? squareToIndex(parts[3]) : null,
       halfmove: parseInt(parts[4]) || 0,
       fullmove: parseInt(parts[5]) || 1,
+      initialFen: fen,
       history: [],
       capturedWhite: [],
       capturedBlack: []
@@ -142,7 +140,7 @@ const ChessEngine = (() => {
     return all.find(m => m.promotion === 'q') || all[0];
   }
 
-  // ─── ЛЕГАЛЬНЫЕ ХОДЫ (генерация — chess.js) ───────────────────
+  // ЛЕГАЛЬНЫЕ ХОДЫ (генерация — chess.js)
   function legalMoves(state, sq) {
     const piece = state.board[sq];
     if (!piece || piece.color !== state.turn) return [];
@@ -159,7 +157,7 @@ const ChessEngine = (() => {
     return chess.moves({ verbose: true }).map(v => verboseToMove(v, squareToIndex(v.from)));
   }
 
-  // ─── ПРИМЕНЕНИЕ ХОДА ─────────────────────────────────────────
+  // ПРИМЕНЕНИЕ ХОДА
   // Вся механика (рокировка, взятие на проходе, превращение,
   // права на рокировку при взятии ладьи и т.д.) — внутри chess.js.
   function applyMove(state, move) {
@@ -173,7 +171,12 @@ const ChessEngine = (() => {
     chess.move({ from: indexToSquare(move.from), to: indexToSquare(move.to), promotion: v.promotion || undefined });
 
     const newState = fenToState(chess.fen());
-    newState.history = [...state.history];
+    newState.initialFen = state.initialFen;
+    // Новая позиция сразу попадает в history: это нужно и для троекратного
+    // повторения при прямых вызовах applyMove (анализ, редактор), и для
+    // Undo-навигации. board.js перезаписывает список своим — эквивалентным
+    // по содержанию, так что двойной записи не возникает.
+    newState.history = [...state.history, { move: { from: move.from, to: move.to, promotion: move.promotion }, san: toSAN(state, move), fen: newState.board ? toFEN(newState) : '' }];
     newState.capturedWhite = [...state.capturedWhite];
     newState.capturedBlack = [...state.capturedBlack];
 
@@ -186,7 +189,7 @@ const ChessEngine = (() => {
     return newState;
   }
 
-  // ─── КОРОЛЬ И АТАКИ ──────────────────────────────────────────
+  // КОРОЛЬ И АТАКИ
   function findKing(state, color) {
     for (let i = 0; i < 64; i++) {
       const p = state.board[i];
@@ -206,7 +209,7 @@ const ChessEngine = (() => {
     }
   }
 
-  // ─── СТАТУС ИГРЫ ─────────────────────────────────────────────
+  // СТАТУС ИГРЫ
   function getStatus(state) {
     const chess = makeChess(state);
     if (!chess) return { status: 'playing', inCheck: false };
@@ -245,19 +248,23 @@ const ChessEngine = (() => {
   function isThreefoldRepetition(state) {
     const currentKey = positionKey(toFEN(state));
     let count = 0;
-    // Стартовая позиция партии не попадает в history (там только позиции
-    // ПОСЛЕ каждого хода) — если через цепочку ходов вернулись именно
-    // к ней, её тоже нужно засчитать как одно из повторений.
-    if (positionKey(START_FEN) === currentKey) count++;
+    // Начальная позиция партии (не обязательно START_FEN — игра может быть
+    // загружена с кастомного FEN) не попадает в history — если вернулись
+    // именно к ней, засчитываем как одно из повторений.
+    if (positionKey(state.initialFen || START_FEN) === currentKey) count++;
     if (state.history) {
       for (const h of state.history) {
         if (h.fen && positionKey(h.fen) === currentKey) count++;
       }
     }
+    // applyMove сам не дописывает новую позицию в history (это делает board.js):
+    // если текущая позиция там отсутствует, она всё равно одна из повторений.
+    const lastHistFen = state.history && state.history.length ? state.history[state.history.length - 1].fen : null;
+    if (!lastHistFen || positionKey(lastHistFen) !== currentKey) count++;
     return count >= 3;
   }
 
-  // ─── SAN НОТАЦИЯ (генерирует chess.js, включая + и #) ────────
+  // SAN НОТАЦИЯ (генерирует chess.js, включая + и #)
   function toSAN(state, move) {
     if (!move || !Number.isInteger(move.from) || !Number.isInteger(move.to)) return '';
     const chess = makeChess(state);
@@ -266,7 +273,7 @@ const ChessEngine = (() => {
     return v ? v.san : '';
   }
 
-  // ─── PGN ──────────────────────────────────────────────────────
+  // PGN
   function toPGN(state, metadata = {}) {
     const tags = {
       Event: metadata.event || 'Chess Home Game',
@@ -287,7 +294,7 @@ const ChessEngine = (() => {
     return pgn;
   }
 
-  // ─── ПУБЛИЧНЫЙ API ────────────────────────────────────────────
+  // ПУБЛИЧНЫЙ API
   return {
     START_FEN,
     parseFEN,

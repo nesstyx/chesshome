@@ -1,33 +1,31 @@
-// ═══════════════════════════════════════════════════════════════
-//  services/game.service.js — активные партии, часы, завершение игр
-// ═══════════════════════════════════════════════════════════════
-//  Карты активных партий, серверные шахматные правила (chess.js-адаптер),
-//  авторитарные часы и финал партии, запись результатов и пересчёт
-//  рейтинга (Эло через Go-сервис с фолбэком на JS-формулу).
-//  Доступ к общим объектам (io, usersCache, findSocketByUsername)
-//  — ленивый через require('../core'), чтобы избежать циклических
-//  зависимостей на этапе загрузки модулей.
-// ═══════════════════════════════════════════════════════════════
+// services/game.service.js — активные партии, часы, завершение игр
+// Карты активных партий, серверные шахматные правила (chess.js-адаптер),
+// авторитарные часы и финал партии, запись результатов и пересчёт
+// рейтинга (Эло через Go-сервис с фолбэком на JS-формулу).
+// Доступ к общим объектам (io, usersCache, findSocketByUsername)
+//ленивый через require('../core'), чтобы избежать циклических
+// зависимостей на этапе загрузки модулей.
 
 const { db, withTransaction } = require('../db');
 
 const tournamentService = require('./tournament.service');
 
 
-// ── Активные партии ───────────────────────────────────────────
+// Активные партии
 const activeGames       = new Map();
 
 const tournamentGames   = new Map();
 
 
-// ── Часы партии — источник истины ТОЛЬКО сервер ────────────────
+// Часы партии — источник истины ТОЛЬКО сервер
 // Сервер сам считает оставшееся время по game.lastMoveAt и не
 // доверяет клиентским заявлениям о таймауте.
 function liveClock(game, now) {
   let { whiteTime, blackTime } = game;
-  // До первого хода белых время не сгорает: просрочку первого хода
-  // контролирует отдельный дедлайн game.firstMoveDeadline (см. тик ниже).
-  if (game.moves.length === 0) return { whiteTime, blackTime };
+  // Первые два полухода (белые и ответ чёрных) идут под отдельным дедлайном
+  // game.firstMoveDeadline — основное время не сгорает ни у кого, чтобы
+  // скрытый дедлайн не «добивал» игрока при идущих основных часах.
+  if (game.firstMoveDeadline && game.moves.length < 2) return { whiteTime, blackTime };
   if (game.lastMoveAt != null && whiteTime !== undefined) {
     const elapsed = (now - game.lastMoveAt) / 1000;
     if (game.turn === 'white') whiteTime = Math.max(0, whiteTime - elapsed);
@@ -80,8 +78,8 @@ setInterval(() => {
       // Дедлайн первого хода: просрочка авторитарно завершает партию
       // сервером, без участия клиента. Турнирные партии обслуживает
       // тик tournament.service.js (там свой дедлайн FIRST_MOVE_TIMEOUT).
-      // moves.length === 0 — белые не сходили (побеждают чёрные);
-      // moves.length === 1 — белые сходили, а чёрные не ответили
+      // moves.length 0 — белые не сходили (побеждают чёрные);
+      // moves.length 1 — белые сходили, а чёрные не ответили
       // (дедлайн им продлевался в sockets.js, побеждают белые).
       if (!game.tournamentId && game.firstMoveDeadline && now > game.firstMoveDeadline) {
         if (game.moves.length === 0) {
@@ -159,7 +157,6 @@ async function updateStats(white, black, result, rated = true) {
   const wLow = white.toLowerCase(), bLow = black.toLowerCase();
   if (wLow === bLow) return; // сам с собой — не бывает, но защита от деления на ноль в Elo
   try {
-    // Стабильность транзакции (P1): сетевой вызов calcNewRatings (fetch к
     // Go-сервису, таймаут 2с) вынесен ДО withTransaction. Раньше он выполнялся
     // внутри открытой транзакции при удержании FOR UPDATE на строках ОБОИХ
     // игроков — недоступный/медленный Go-сервис растягивал блокировку на
@@ -218,7 +215,7 @@ async function updateStats(white, black, result, rated = true) {
 }
 
 
-// ── Товарищеская партия по вызову из лобби ────────────────────
+// Товарищеская партия по вызову из лобби
 // До первого хода белые часы не сгорают вовсе (см. liveClock), поэтому
 // бездействие ограничено отдельным дедлайном: через 30с без хода сервер
 // завершает партию авторитарно (timeout_firstmove).
@@ -235,7 +232,7 @@ function startGame(acceptorSocket, challenge) {
   const tcInc = Number(tcIncStr);
   const tcSec = tcBase && tcBase.endsWith('s') ? (Number(tcBase.slice(0, -1)) || 15) : (Number(tcBase) || 10) * 60;
   const gameNow = Date.now();
-  // Товарищеская партия: challenge.rated === false явно выставляется при
+  // Товарищеская партия: challenge.rated false явно выставляется при
   // создании вызова (post_challenge / challenge_user). По умолчанию — рейтинговая.
   const rated = challenge.rated !== false;
   const game = {
@@ -257,12 +254,12 @@ function startGame(acceptorSocket, challenge) {
 }
 
 
-// ── Шахматные правила НА chess.js ─────────────────────────────
+// Шахматные правила НА chess.js
 // Вся логика правил — в библиотеке chess.js, модуль лишь адаптирует
 // её к внутреннему формату партии:
-//   board   = { squares: Array(64) из null | [ТИП,'w'|'b'],
-//               turn: 'w'|'b', castling: {wK,wQ,bK,bQ}, epSquare: idx|-1 }
-//   move    = { from: 0..63, to: 0..63, promotion?: 'q'|'Q', ep?, castle? }
+// board   = { squares: Array(64) из null | [ТИП,'w'|'b'],
+// turn: 'w'|'b', castling: {wK,wQ,bK,bQ}, epSquare: idx|-1 }
+// move    = { from: 0..63, to: 0..63, promotion?: 'q'|'Q', ep?, castle? }
 const serverChess = (() => {
   const { Chess } = require('chess.js');
 
@@ -398,7 +395,6 @@ const serverChess = (() => {
         const promo = move.promotion ? String(move.promotion).toLowerCase() : undefined;
         c.move({ from: indexToSquare(move.from), to: indexToSquare(move.to), promotion: promo });
       } catch (e) {
-        // Пытаемся с ферзём по умолчанию (старое поведение), иначе — прерываем
         try {
           c.move({ from: indexToSquare(move.from), to: indexToSquare(move.to), promotion: 'q' });
         } catch (e2) {

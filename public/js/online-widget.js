@@ -23,12 +23,10 @@
   var API = '/api';
   var socket = null;
 
-  // ── helpers ────────────────────────────────────────────────────
+  // helpers
 
-  // Мёртвый код попапа УДАЛЕН (createPopup, positionPopup,
   // renderPopupLoading, loadUserList, openPopup, closePopup и локальная
   // escHtml): клик по бейджу всегда ведёт на /online, попап технически
-  // невозможно было открыть.
 
   function setCount(n) {
     // header.js использует id="ch-online-count" и "ch-drawer-online-count"
@@ -41,7 +39,7 @@
     if (window.CH && typeof CH.setOnlineCount === 'function') CH.setOnlineCount(n);
   }
 
-  // ── socket connection ──────────────────────────────────────────
+  // socket connection
 
   
 
@@ -77,7 +75,7 @@
     // сокет по HttpOnly-cookie из handshake, отдельный emit('auth') не нужен
   }
 
-  // ── badge click handler ────────────────────────────────────────
+  // badge click handler
 
   function initBadge() {
     // header.js создаёт бейдж с id="ch-online-badge"
@@ -102,7 +100,7 @@
     bindCountClicks();
   }
 
-  // ── init ───────────────────────────────────────────────────────
+  // init
 
   function init() {
     // Connect socket to mark ourselves online

@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/pages.js — HTML-страницы (статические маршруты)
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного routes.js в рамках рефакторинга.
-//  Код маршрутов не изменён — только обёртка-регистратор.
+// routes/pages.js — HTML-страницы (статические маршруты)
 
 const {
   path,
@@ -43,6 +39,7 @@ app.get('/opening-database', (req, res) => res.sendFile(path.join(__dirname, '..
 
 app.get('/blog',    (req, res) => res.sendFile(path.join(__dirname, '../../public/blog.html')));
 app.get('/vs-computer',    (req, res) => res.sendFile(path.join(__dirname, '../../public/vs-computer.html')));
+app.get('/tv',      (req, res) => res.sendFile(path.join(__dirname, '../../public/tv.html')));
 
 
 app.get('/blog/:id',(req, res) => {

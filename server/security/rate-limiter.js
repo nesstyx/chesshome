@@ -1,12 +1,9 @@
-// ═══════════════════════════════════════════════════════════════
-//  security/rate-limiter.js — DDoS / rate limiting
-// ═══════════════════════════════════════════════════════════════
-//  Класс RateLimiter, готовые инстансы лимитеров и express-middleware
-//  rateLimit() (раньше жили в core.js).
+// security/rate-limiter.js — DDoS / rate limiting
+// Класс RateLimiter, готовые инстансы лимитеров и express-middleware
 
 const { getIP } = require('../http/client-ip');
 
-// ── DDoS / Rate limiting ──────────────────────────────────────
+// DDoS / Rate limiting
 class RateLimiter {
   constructor(windowMs, max) {
     this.windowMs = windowMs; this.max = max; this.store = new Map();

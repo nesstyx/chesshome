@@ -1,9 +1,7 @@
-// ═══════════════════════════════════════════════════════════
-//  app/boot.js — инициализация приложения (DOMContentLoaded)
-// ═══════════════════════════════════════════════════════════
-//  Вынесено из монолитного app.js в рамках рефакторинга.
-//  Код не изменён. Файл — классический скрипт в глобальной области,
-//  подключается после /js/app/core.js в исходном порядке следования.
+// app/boot.js — инициализация приложения (DOMContentLoaded)
+// Вынесено из монолитного app.js в рамках рефакторинга.
+// Код не изменён. Файл — классический скрипт в глобальной области,
+// подключается после /js/app/core.js в исходном порядке следования.
 
 document.addEventListener('DOMContentLoaded', async () => {
 
@@ -95,6 +93,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   } else if (rawPath === 'forum' || rawPath.startsWith('forum/')) {
     // Форум — отдельная страница, ничего не делаем
     targetPage = null;
+  } else if (rawPath === 'tv') {
+    // Chess Home TV — отдельная страница со своим скриптом /js/tv.js
+    targetPage = null;
   } else if (rawPath.startsWith('game/')) {
     // /game/UUID — показываем страницу игры, реджойн придёт через сокет
     targetPage = 'game';
@@ -156,6 +157,4 @@ document.addEventListener('DOMContentLoaded', async () => {
     fetchOnline();
   }, 10000);
 });
-// ══════════════════════════════════════════════════════════════
-//  PUZZLE MODULE
-// ══════════════════════════════════════════════════════════════
+// PUZZLE MODULE

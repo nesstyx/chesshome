@@ -1035,7 +1035,8 @@
   function makeMove(from, to) {
     const p      = storm.board[from];
     const toRank = Math.floor(to / 8);
-    const isPromo = p?.type==='p' &&
+    // ChessEngine хранит типы фигур в верхнем регистре ('P', 'Q', ...)
+    const isPromo = p?.type === 'P' &&
       ((p.color==='w'&&toRank===7)||(p.color==='b'&&toRank===0));
     if (isPromo) { showPromoDialog(from, to); return; }
     checkMove(from, to, ChessEngine.indexToSquare(from)+ChessEngine.indexToSquare(to));

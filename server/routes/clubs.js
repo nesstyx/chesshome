@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/clubs.js — клубы (вступление, чат, модерация)
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного routes.js в рамках рефакторинга.
-//  Код маршрутов не изменён — только обёртка-регистратор.
+// routes/clubs.js — клубы (вступление, чат, модерация)
 
 const {
   uuidv4,
@@ -96,9 +92,7 @@ app.post('/api/clubs/:id/join', authMiddleware, rateLimit(limiterStrict), async 
 });
 
 
-// ──────────────────────────────────────────────────────────────
-//  User Emoji
-// ──────────────────────────────────────────────────────────────
+// User Emoji
 
 
 app.post('/api/clubs/:id/leave', authMiddleware, async (req, res) => {
@@ -197,7 +191,7 @@ app.delete('/api/clubs/:id', authMiddleware, handleDeleteClub);
 app.post('/api/clubs/:id/delete', authMiddleware, handleDeleteClub);
 
 
-// ── Club Chat API ──────────────────────────────────────────────
+// Club Chat API
 app.get('/api/clubs/:id/chat', authMiddleware, (req, res) => {
   const club = clubs.find(c => c.id === req.params.id);
   if (!club) return res.status(404).json({ error: 'Клуб не найден' });
@@ -290,7 +284,7 @@ app.post('/api/clubs/:id/chat-unban', authMiddleware, (req, res) => {
 });
 
 
-app.post('/api/clubs/:id/chat-report', authMiddleware, (req, res) => {
+app.post('/api/clubs/:id/chat-report', authMiddleware, rateLimit(limiterStrict), (req, res) => {
   const club = clubs.find(c => c.id === req.params.id);
   if (!club) return res.status(404).json({ error: 'Клуб не найден' });
   const me = req.user;
@@ -304,7 +298,6 @@ app.post('/api/clubs/:id/chat-report', authMiddleware, (req, res) => {
   }
   res.json({ ok: true });
 });
-
 
 
 async function handleEditClub(req, res) {

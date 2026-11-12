@@ -355,7 +355,7 @@
   retryBtn.addEventListener('click', () => {
     if (!retryBtn.classList.contains('ready')) return;
     retryBtn.textContent = 'Отправка запроса...';
-    setTimeout(() => { retryBtn.textContent = 'Повторить запрос'; }, 1400);
+    window.location.reload();
   });
 
   /* ── Мини-игра "Защита сервера" ── */

@@ -1,20 +1,16 @@
-// ═══════════════════════════════════════════════════════════════
-//  core.js — общее состояние сервера
-// ═══════════════════════════════════════════════════════════════
+// core.js — общее состояние сервера
 // Системные синглтоны (app, io, server, env), общие кэши и хелперы.
 // Доменная логика вынесена в сервисные модули:
-//   server/db.js                          — пул PostgreSQL, db(), транзакции
-//   server/services/game.service.js       — партии, часы, финалы, рейтинг
-//   server/services/tournament.service.js — турниры, жеребьёвка, тик
-//   server/services/chat.service.js       — история чатов (глобал/клубы/турниры)
-//   server/utils.js                       — серверные хелперы (escapeHtml)
+// server/db.js                          — пул PostgreSQL, db(), транзакции
+// server/services/game.service.js       — партии, часы, финалы, рейтинг
+// server/services/tournament.service.js — турниры, жеребьёвка, тик
+// server/services/chat.service.js       — история чатов (глобал/клубы/турниры)
+// server/utils.js                       — серверные хелперы (escapeHtml)
 //
-// routes.js и sockets.js делают:
-//   const { app, io, db, ... } = require('./core');
-// и используют эти же самые объекты — состояние по-настоящему общее,
-// это НЕ копии. Экспорт внизу файла дополняет module.exports
-// через Object.assign — ссылки у всех общие.
-// ═══════════════════════════════════════════════════════════════
+// Роуты и сокеты подключают общие объекты так:
+// const { app, io, db, ... } = require('./core');
+// Состояние по-настоящему общее, это НЕ копии. Экспорт внизу файла
+// дополняет module.exports через Object.assign — ссылки у всех общие.
 
 const express = require('express');
 
@@ -47,12 +43,14 @@ const path    = require('path');
 
 const fs      = require('fs');
 
+const crypto  = require('crypto');
+
 const cors    = require('cors');
 
-// ── PostgreSQL: пул и хелперы запросов — в server/db.js ────────
+// PostgreSQL: пул и хелперы запросов — в server/db.js
 const { pool, db, withTransaction } = require('./db');
 
-// ── Сервисные модули (см. шапку файла) ────────────────────────
+// Сервисные модули (см. шапку файла)
 const chatService       = require('./services/chat.service');
 const gameService       = require('./services/game.service');
 const tournamentService = require('./services/tournament.service');
@@ -117,7 +115,7 @@ const {
 
 require('dotenv').config();
 
-// ── Извлечённые модули (чистые слои без состояния сервера) ─────
+// Извлечённые модули (чистые слои без состояния сервера)
 const {
   BAD_NICK_WORDS, normNick, nickHasBadWord, normForSimilarity,
 } = require('./validation/nicknames');
@@ -147,29 +145,45 @@ const app = express();
 app.use((req, res, next) => { req.cookies = parseCookieHeader(req.headers.cookie); next(); });
 
 
+// Device ID выдаётся и хранится ТОЛЬКО сервером (HttpOnly + HMAC)
+// Cookie подписывается серверным секретом: клиентское значение без
+// валидной подписи отбрасывается, подмена device id невозможна.
+function signDeviceId(id) {
+  const sig = crypto.createHmac('sha256', process.env.JWT_SECRET || 'dev').update(id).digest('hex').slice(0, 24);
+  return `${id}.${sig}`;
+}
 
-// ── Device ID выдаётся и хранится ТОЛЬКО сервером (HttpOnly) ──
+function verifyDeviceCookie(raw) {
+  if (typeof raw !== 'string') return null;
+  const dot = raw.lastIndexOf('.');
+  if (dot < 0) return null;
+  const id = raw.slice(0, dot), sig = raw.slice(dot + 1);
+  if (!/^dev_[0-9a-f-]{36}$/i.test(id) || !sig) return null;
+  const expected = crypto.createHmac('sha256', process.env.JWT_SECRET || 'dev').update(id).digest('hex').slice(0, 24);
+  return safeSecretEqual(sig, expected) ? id : null;
+}
+
 app.use((req, res, next) => {
-  let deviceId = req.cookies.ch_device_id;
+  let deviceId = verifyDeviceCookie(req.cookies.ch_device_id);
   if (!deviceId) {
     deviceId = 'dev_' + uuidv4();
-    res.cookie('ch_device_id', deviceId, DEVICE_COOKIE_OPTS);
+    res.cookie('ch_device_id', signDeviceId(deviceId), DEVICE_COOKIE_OPTS);
   }
   req.deviceId = deviceId;
   next();
 });
 
 
-// ── Доверие к прокси (Nginx + Cloudflare) ────────────────────
+// Доверие к прокси
 // ВАЖНО: должно быть ДО любых middleware и роутов.
-// Значение 2 означает: доверяем двум уровням прокси —
-//   1-й hop: Cloudflare → ваш сервер
-//   2-й hop: Nginx → Node.js
-// После этого req.ip будет автоматически содержать реальный IP клиента.
-app.set('trust proxy', 2);
+// TRUST_PROXY задаёт число доверенных proxy-хопов (например 2 для
+// Cloudflare → Nginx → Node) или имя подсети. По умолчанию 'loopback' —
+// доверяем только соединениям с локальной машины: клиентский
+// X-Forwarded-For с прямых запросов IP-спуфингом не считается.
+app.set('trust proxy', process.env.TRUST_PROXY ? (Number(process.env.TRUST_PROXY) || process.env.TRUST_PROXY) : 'loopback');
 
 
-// ── PUZZLE STORM: серверный трекинг забегов ─────────────────────
+// PUZZLE STORM: серверный трекинг забегов
 const STORM_DURATION_MS   = 180_000;
         // должно совпадать со STORM_DURATION в storm.html
 const STORM_MAX_TIME_MS   = STORM_DURATION_MS * 1.5 + 20_000;
@@ -184,7 +198,7 @@ setInterval(() => {
 }, 5 * 60_000);
 
 
-// ── Кэш пользователей ─────────────────────────────────────────
+// Кэш пользователей
 const usersCache = new Map();
 
 const USERS_CACHE_MAX = 100_000;
@@ -239,7 +253,7 @@ function rowToUser(row) {
 }
 
 
-// ── VIP-значок ───────────────────────────────────────────────
+// VIP-значок
 // Значок временный: активен, пока vipUntil в будущем. Никакой
 // отдельной чистки не требуется — как только время истекло,
 // isVip() везде начинает возвращать false сам по себе.
@@ -250,7 +264,7 @@ function isVip(u) { return !!(u && u.vipUntil && u.vipUntil > Date.now()); }
 function isVipGranter(username) { return isSiteAdmin(username); }
 
 
-// ── Значки в профиле (сезоны и т.п.) ─────────────────────────
+// Значки в профиле (сезоны и т.п.)
 // В БД у игрока хранится только массив id значков (users.badges), а
 // картинки/названия живут здесь. Чтобы добавить новый значок — положите
 // картинку в public/img/seasons/ и допишите строку в каталог ниже.
@@ -297,9 +311,9 @@ async function saveUser(u) {
       u.vipUntil ?? null, u.shadowBanned || false, u.shadowBanReason || null,
       JSON.stringify(u.badges || [])]);
 
-  // ── Бан должен действовать СРАЗУ ──
+  // Бан должен действовать СРАЗУ
   // 1) кэш пользователей синхронизируем с тем, что только что записали в БД,
-  //    иначе проверки getUser() продолжат видеть старый banned=false;
+  // иначе проверки getUser() продолжат видеть старый banned=false;
   // 2) у забаненного рвём все открытые сокеты (иначе он продолжает писать в чат).
   try {
     cacheUser(u);
@@ -314,14 +328,14 @@ async function saveUser(u) {
 }
 
 
-// ── Кэш глобального чата, турниры и их чаты — в services/ ─────
+// Кэш глобального чата, турниры и их чаты — в services/
 // chat.service.js: globalChat/loadChat/saveChatMsg/deleteChatMsg,
-//                  клубные и турнирные чаты (кэши + БД)
+// клубные и турнирные чаты (кэши + БД)
 // tournament.service.js: tournaments/loadTournaments/saveTournament
 // game.service.js: activeGames, часы, финалы партий
 
 
-// ── Клубы ─────────────────────────────────────────────────────
+// Клубы
 const clubs = [];
 
 async function loadClubs() {
@@ -352,10 +366,10 @@ async function deleteClubFromDB(id) {
 }
 
 
-// ── Чаты клубов: права и модерация ────────────────────────────
+// Чаты клубов: права и модерация
 
 // Сайт-админ: источник истины — роль 'admin' в БД (users.role). Она:
-//  1) подтверждается на старте для legacy-ников bootstrap (см. main()),
+// 1) подтверждается на старте для legacy-ников bootstrap (см. main()),
 function isSiteAdmin(username) {
   if (!username) return false;
   const low = String(username).toLowerCase();
@@ -379,7 +393,7 @@ function isClubModerator(club, username) {
 function canManageTournament(user, t) {
   if (!user) return false;
   if (user.role === 'admin') return true;
-  // Межклубные турниры (t.isInterclub) не привязаны к одному клубу (t.clubId === null),
+  // Межклубные турниры (t.isInterclub) не привязаны к одному клубу (t.clubId null),
   // поэтому этот блок для них не срабатывает — управлять ими может ТОЛЬКО сайт-админ.
   if (t.clubId) {
     const club = clubs.find(c => c.id === t.clubId);
@@ -411,7 +425,7 @@ function canWriteInClubChat(club, username) {
 }
 
 
-// ── Чат турниров: права модерации ────────────────────────────
+// Чат турниров: права модерации
 // Модератор чата турнира: сайт-админ, админ клуба (если турнир клубный)
 // ИЛИ создатель конкретно этого турнира. Само хранилище чатов —
 // в services/chat.service.js.
@@ -422,7 +436,7 @@ function canModerateTournamentChat(user, t) {
 }
 
 
-// ── Форум ─────────────────────────────────────────────────────
+// Форум
 const forumThreads = [];
 
 const forumReplies = [];
@@ -472,7 +486,7 @@ async function deleteForumReply(id) {
 }
 
 
-// ── Блог ──────────────────────────────────────────────────────
+// Блог
 const blogPosts = [];
 
 async function loadBlog() {
@@ -511,7 +525,7 @@ async function deleteBlogPost(id) {
 }
 
 
-// ── Новости (News) ───────────────────────────────────────────
+// Новости (News)
 // В отличие от блога (открыт любому зарегистрированному юзеру, макс
 // 1 статья/день), новости пишут только авторы, назначенные владельцем
 // (username 'chesshome'). См. также newsAuthors ниже и API-контракт в
@@ -589,7 +603,7 @@ const SITE_URL   = process.env.SITE_URL || 'https://chesshome.pro';
 const RESERVED   = ['chesshome', 'admin', 'moderator', 'system', 'система'];
 
 
-// ── Системные сообщения ─────────────────────────────────────────
+// Системные сообщения
 // Отправитель для широковещательных/точечных сообщений от админа.
 // Это не настоящий аккаунт (ник зарезервирован в RESERVED выше) —
 // "системность" сообщения определяется только по полю from_user.
@@ -610,7 +624,7 @@ const pendingChallenges = [];
 // activeGames / tournamentGames — в services/game.service.js
 
 
-// ── ПУЛ ДОМАШНИХ WORKER'ОВ (ваши ПК) ────────────────────────────
+// ПУЛ ДОМАШНИХ WORKER'ОВ (ваши ПК)
 // Каждый воркер — обычное исходящее socket.io-подключение с вашего ПК
 // (не нужно открывать порты/иметь белый IP), аутентифицируется секретом
 // из .env. Поддерживается СРАЗУ НЕСКОЛЬКО воркеров одновременно —
@@ -631,7 +645,7 @@ function pickIdleWorker() {
 }
 
 
-// ── Безопасность заголовков ───────────────────────────────────
+// Безопасность заголовков
 app.use((req, res, next) => {
   res.set('X-Frame-Options', 'SAMEORIGIN');
   res.set('X-Content-Type-Options', 'nosniff');
@@ -706,6 +720,14 @@ app.use((req, res, next) => {
 
 app.use(require('./sitemap')({ db: pool }));
 
+// Прямые запросы к /<page>.html перехватываем ДО express.static и отдаём
+// через sendVersionedHtml — иначе статика возвращает файл без ?v= в src
+// скриптов и после деплоя браузер до часа держит старые закэшированные JS.
+app.get(/^\/([a-z0-9_-]+)\.html$/i, (req, res, next) => {
+  const candidate = path.join(__dirname, '../public', req.params[0] + '.html');
+  if (fs.existsSync(candidate)) return sendVersionedHtml(res, candidate);
+  next();
+});
 
 app.use(express.static(path.join(__dirname, '../public'), {
   maxAge: '1h',
@@ -729,23 +751,19 @@ async function logAdminAction(admin, action, target, details) {
 }
 
 
-// ── Blog API ──────────────────────────────────────────────────
+// Blog API
 function isBlogAdmin(username) { return isSiteAdmin(username); }
 
 
-// ══════════════════════════════════════════════════════════════
-//  NEWS API
-//  Контракт см. в комментарии наверху public/news.html.
-//  В отличие от блога, публиковать новости может не любой юзер, а
-//  только авторы, назначенные владельцем (username 'chesshome').
-// ══════════════════════════════════════════════════════════════
+// NEWS API
+// Контракт см. в комментарии наверху public/news.html.
+// В отличие от блога, публиковать новости может не любой юзер, а
+// только авторы, назначенные владельцем (username 'chesshome').
 const NEWS_OWNER_USERNAME = 'chesshome';
 
 function isNewsOwner(username) { return !!username && username.toLowerCase() === NEWS_OWNER_USERNAME; }
 
-// ══════════════════════════════════════════════════════════════
-//  HELPERS
-// ══════════════════════════════════════════════════════════════
+// HELPERS
 
 const BANNED_ALLOWED_PATHS = [
   /^\/api\/me$/,
@@ -762,6 +780,11 @@ async function authMiddleware(req, res, next) {
   try {
     const u = await getUser(String(decoded.username || '').toLowerCase());
     if (!u) return res.status(401).json({ error: 'Аккаунт не найден' });
+    // Метка пароля в токене: выпущен до последней смены пароля — сессия отозвана.
+    if (decoded.ph) {
+      const expectedPh = crypto.createHash('sha256').update(String(u.passwordHash || '')).digest('hex').slice(0, 12);
+      if (decoded.ph !== expectedPh) return res.status(401).json({ error: 'Сессия устарела, войдите заново' });
+    }
     if (u.banned) {
       const p = String(req.originalUrl || req.url || '').split('?')[0];
       if (!BANNED_ALLOWED_PATHS.some(rx => rx.test(p))) {
@@ -842,8 +865,7 @@ function verifyToken(t) { try { return jwt.verify(t, JWT_SECRET); } catch { retu
 
 
 function findSocketByUsername(username) {
-  // Было: линейный перебор всей карты sessions на каждый вызов (O(n)).
-  // Стало: прямой доступ по индексу usernameToSocketId (O(1)).
+  //прямой доступ по индексу usernameToSocketId (O(1)).
   //
   // Multi-socket: у юзера может быть несколько легитимных сокетов одновременно
   // (основной app.js + DM-сокет header.js). Возвращаем fanout-эмиттер: emit()
@@ -867,7 +889,7 @@ function findSocketByUsername(username) {
 }
 
 
-// ── Приватные события только для админов ──────────────────────
+// Приватные события только для админов
 async function emitToAdmins(event, payload) {
   // Multi-socket: у одного админа может быть несколько сокетов/сессий —
   // дедуплицируем по нику, чтобы каждый админ получил событие один раз.
@@ -887,7 +909,7 @@ async function emitToAdmins(event, payload) {
 const limiterSocketConnect = new RateLimiter(60_000, 200);
 
 
-// ── Мониторинг: задержка event loop и очередь на соединение с БД ──────────
+// Мониторинг: задержка event loop и очередь на соединение с БД
 // Пишет в лог ТОЛЬКО при проблеме: p99 задержки цикла > 50 мс или запросы ждут
 // свободного соединения из пула.
 const { monitorEventLoopDelay } = require('perf_hooks');
@@ -954,7 +976,7 @@ async function main() {
   });
 }
 
-// ── Экспорт всего, что нужно routes.js и sockets.js ────────────
+// Экспорт всего, что нужно routes.js и sockets.js
 Object.assign(module.exports, {
   express,
   http,

@@ -30,7 +30,7 @@
   CASTLE_MASK[0] = 13; CASTLE_MASK[4] = 12; CASTLE_MASK[7] = 14;
   CASTLE_MASK[112] = 7; CASTLE_MASK[116] = 3; CASTLE_MASK[119] = 11;
 
-  // ── Zobrist ───────────────────────────────────────────────────────────────
+  // Zobrist
   var _seed = 0x9e3779b9;
   function rnd32() {
     _seed ^= _seed << 13; _seed ^= _seed >>> 17; _seed ^= _seed << 5;
@@ -42,7 +42,7 @@
   var zC = new Int32Array(16); for (zi = 0; zi < 16; zi++) zC[zi] = rnd32();
   var zEp = new Int32Array(8); for (zi = 0; zi < 8; zi++) zEp[zi] = rnd32();
 
-  // ── Ходы: from | to<<7 | promo<<14 | flag<<17 ────────────────────────────
+  // Ходы: from | to<<7 | promo<<14 | flag<<17
   // flag: 1 = взятие на проходе, 2 = короткая рокировка, 4 = длинная, 8 = двойной ход пешки
   function mk(from, to, promo, flag) { return from | (to << 7) | ((promo || 0) << 14) | ((flag || 0) << 17); }
   function mFrom(m) { return m & 127; }
@@ -54,7 +54,7 @@
     return sqName(mFrom(m)) + sqName(mTo(m)) + (p ? 'nbrq'[p - 2] : '');
   }
 
-  // ── Позиция ───────────────────────────────────────────────────────────────
+  // Позиция
   function Position() {
     this.board = new Int8Array(128);
     this.side = WHITE; this.castle = 0; this.ep = -1; this.half = 0; this.full = 1;
@@ -384,7 +384,7 @@
     return f[0] + ' ' + f[1] + ' ' + f[2] + ' ' + f[3];
   };
 
-  // ── Оценка ────────────────────────────────────────────────────────────────
+  // Оценка
   var VAL = [0, 100, 320, 330, 500, 900, 0];
   var PST = {
     1: [0,0,0,0,0,0,0,0, 50,50,50,50,50,50,50,50, 10,10,20,30,30,20,10,10, 5,5,10,25,25,10,5,5,
@@ -446,7 +446,7 @@
     return centerDist(lk) * 12 + (14 - (dr + df)) * 5;
   }
 
-  // ── Поиск ─────────────────────────────────────────────────────────────────
+  // Поиск
   var MATE = 30000, INF = 32000;
   var TT_BITS = 18, TT_SIZE = 1 << TT_BITS, TT_MASK = TT_SIZE - 1;
   var ttKey = new Int32Array(TT_SIZE), ttMove = new Int32Array(TT_SIZE);
@@ -640,7 +640,7 @@
     return { move: bestMove, score: bestScore, depth: doneDepth, nodes: nodes };
   }
 
-  // ── Уровни ботов ──────────────────────────────────────────────────────────
+  // Уровни ботов
   var BOTS = {
     pawnik:  { id: 'pawnik',  name: 'Пешкин',      level: 'Новичок', stars: 1, icon: '🐣', engine: 'own',
                desc: 'Смотрит на один ход вперёд и часто зевает фигуры. Для самых первых партий.',
@@ -659,7 +659,7 @@
                cfg: {} }
   };
 
-  // ── Экспорт ───────────────────────────────────────────────────────────────
+  // Экспорт
   var api = {
     WHITE: WHITE, BLACK: BLACK, START_FEN: START_FEN, BOTS: BOTS,
     Position: Position, moveToUci: moveToUci, sqName: sqName, sqFrom: sqFrom,
@@ -669,7 +669,7 @@
   root.CHCore = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 
-  // ── Режим Web Worker ──────────────────────────────────────────────────────
+  // Режим Web Worker
   if (typeof WorkerGlobalScope !== 'undefined' && root instanceof WorkerGlobalScope) {
     var wpos = new Position();
     root.onmessage = function (e) {

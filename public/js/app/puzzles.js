@@ -1,9 +1,5 @@
-// ═══════════════════════════════════════════════════════════
-//  app/puzzles.js — пазлы: каталог, решатель, рейтинг, лидерборд
-// ═══════════════════════════════════════════════════════════
-//  Вынесено из монолитного app.js в рамках рефакторинга.
-//  Код не изменён. Файл — классический скрипт в глобальной области,
-//  подключается после /js/app/core.js в исходном порядке следования.
+// app/puzzles.js — пазлы: каталог, решатель, рейтинг, лидерборд
+// подключается после /js/app/core.js в исходном порядке следования.
 
 const PUZZLE_PIECE_IMG = {
   wk:'wK',wq:'wQ',wr:'wR',wb:'wB',wn:'wN',wp:'wP',
@@ -53,6 +49,26 @@ function pzFenToBoard(fen) {
 }
 function pzBoardTurn(fen) { return (fen.split(' ')[1]||'w'); }
 function pzSqToUCI(sq) { return 'abcdefgh'[sq%8]+(Math.floor(sq/8)+1); }
+
+// Применяет ход к массиву доски с учётом рокировки и взятия на проходе:
+// ручное копирование nb[to]=nb[from] теряло ладью при рокировке и пешку
+// соперника при en passant.
+function pzApplyUciToBoard(board, from, to, promoChoice) {
+  const nb = [...board];
+  const p = nb[from];
+  if (!p) return nb;
+  if (p.type === 'k' && Math.abs((to % 8) - (from % 8)) === 2) {
+    const rankBase = Math.floor(from / 8) * 8;
+    if (to > from) { nb[rankBase + 5] = nb[rankBase + 7]; nb[rankBase + 7] = null; }
+    else           { nb[rankBase + 3] = nb[rankBase];     nb[rankBase] = null; }
+  }
+  if (p.type === 'p' && (from % 8) !== (to % 8) && !nb[to]) {
+    nb[Math.floor(from / 8) * 8 + (to % 8)] = null;
+  }
+  nb[to] = promoChoice ? { color: p.color, type: promoChoice } : p;
+  nb[from] = null;
+  return nb;
+}
 
 function pzRender() {
   const el = document.getElementById('puzzle-board');
@@ -237,13 +253,9 @@ async function pzDoMove(from, to, promoChoice) {
   const promo = isPromotion ? (promoChoice || 'q') : '';
   const move = pzSqToUCI(from) + pzSqToUCI(to) + promo;
 
-  // Применяем ход на доске
-  const nb = [...pz.board];
-  nb[to] = isPromotion
-    ? { color: movingPiece.color, type: promoChoice || 'q' }
-    : nb[from];
-  nb[from] = null;
-  pz.board = nb; pz.lastMove = { from, to };
+  // Применяем ход на доске (рокировка и взятие на проходе учитываются)
+  pz.board = pzApplyUciToBoard(pz.board, from, to, isPromotion ? (promoChoice || 'q') : null);
+  pz.lastMove = { from, to };
   // После хода игрока — теперь ходит соперник
   pz.playerTurn = pz.playerTurn === 'w' ? 'b' : 'w';
 
@@ -294,8 +306,7 @@ async function pzDoMove(from, to, promoChoice) {
         pz.board = pzFenToBoard(pz.puzzle.fen);
         // Восстанавливаем доску до текущего состояния (все правильные ходы до ошибки)
         for (const h of pz._history) {
-          const nb2 = [...pz.board]; nb2[h.lastMove.to] = nb2[h.lastMove.from]; nb2[h.lastMove.from] = null;
-          pz.board = nb2;
+          pz.board = pzApplyUciToBoard(pz.board, h.lastMove.from, h.lastMove.to);
         }
         pz.lastMove = pz._history.length ? pz._history[pz._history.length-1].lastMove : null;
         pz.selected = null;
@@ -347,12 +358,8 @@ async function pzDoMove(from, to, promoChoice) {
         const autoFrom = pzUCIToSq(res.autoMove.slice(0, 2));
         const autoTo   = pzUCIToSq(res.autoMove.slice(2, 4));
         const autoPromo = res.autoMove.length === 5 ? res.autoMove[4] : null;
-        const ab = [...pz.board];
-        ab[autoTo] = autoPromo
-          ? { color: ab[autoFrom] ? ab[autoFrom].color : 'w', type: autoPromo }
-          : ab[autoFrom];
-        ab[autoFrom] = null;
-        pz.board = ab; pz.lastMove = { from: autoFrom, to: autoTo };
+        pz.board = pzApplyUciToBoard(pz.board, autoFrom, autoTo, autoPromo);
+        pz.lastMove = { from: autoFrom, to: autoTo };
         // После хода соперника — снова ходит игрок
         pz.playerTurn = pz.playerTurn === 'w' ? 'b' : 'w';
 
@@ -377,7 +384,7 @@ async function pzDoMove(from, to, promoChoice) {
 }
 
 // Конвертация UCI-нотации (e2) в индекс клетки
-// ── Диалог выбора фигуры при превращении пешки ───────────────
+// Диалог выбора фигуры при превращении пешки
 function pzShowPromotionDialog(from, to) {
   const old = document.getElementById('pz-promo-dialog');
   if (old) old.remove();
@@ -421,7 +428,7 @@ function pzUCIToSq(uci) {
   return row * 8 + col;
 }
 
-// ─── Навигация по истории ходов пазла (стрелки) ───────────────
+// Навигация по истории ходов пазла (стрелки)
 function pzUpdateNavArrows() {
   const btnFirst = document.getElementById('pz-nav-first');
   const btnPrev  = document.getElementById('pz-nav-prev');
@@ -836,4 +843,4 @@ async function loadPuzzleLeaderboardFull() {
   } catch(e) { el.innerHTML='<div style="padding:20px;text-align:center;color:var(--red)">'+chT('puzzles.lb_error','Ошибка загрузки')+'</div>'; }
 }
 
-// ─── DM УВЕДОМЛЕНИЕ НА САЙТЕ (показывается на всех страницах) ──
+// DM УВЕДОМЛЕНИЕ НА САЙТЕ (показывается на всех страницах)

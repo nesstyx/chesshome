@@ -1,8 +1,3 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/users.js — профили, эмодзи и bio (поиск — в auth.js, порядок как в оригинале)
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного routes.js в рамках рефакторинга.
-//  Код маршрутов не изменён — только обёртка-регистратор.
 
 const {
   db,
@@ -55,7 +50,6 @@ app.get('/api/users/:username/games', async (req, res) => {
 });
 
 
-
 app.post('/api/user/emoji', authMiddleware, async (req, res) => {
   try {
     const { emoji } = req.body;
@@ -76,9 +70,7 @@ app.post('/api/user/emoji', authMiddleware, async (req, res) => {
 });
 
 
-// ──────────────────────────────────────────────────────────────
-//  User Profile (описание + внешние рейтинги ФШР/FIDE)
-// ──────────────────────────────────────────────────────────────
+// User Profile (описание + внешние рейтинги ФШР/FIDE)
 
 
 const INVISIBLE_RE = /[\u00AD\u034F\u115F\u1160\u180E\u200B\u2060\u2800\u3164\uFEFF\uFFA0\u202A-\u202E\u2066-\u2069\u0000-\u0009\u000B-\u001F\u007F-\u009F]/g;
@@ -120,7 +112,6 @@ app.post('/api/user/profile', authMiddleware, async (req, res) => {
 });
 
 
-
 app.get('/api/users/:username/clubs', (req, res) => {
   const uname = req.params.username.toLowerCase();
   const userClubs = clubs.filter(c => (c.members || []).map(m => m.toLowerCase()).includes(uname));
@@ -129,7 +120,7 @@ app.get('/api/users/:username/clubs', (req, res) => {
 
 
 // Два рейтинга задач:
-//   GET /api/puzzles/leaderboard             — общий (старая + новая система, как раньше)
-//   GET /api/puzzles/leaderboard?system=new  — только новая система (Glicko-2, puzzle_rating_system = 2)
+// GET /api/puzzles/leaderboard             — общий (старая + новая система, как раньше)
+// GET /api/puzzles/leaderboard?system=new  — только новая система (Glicko-2, puzzle_rating_system = 2)
 // Одинаковый рейтинг сортируем по числу решённых и нику — иначе порядок «прыгает» между обновлениями.
 };

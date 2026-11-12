@@ -1,8 +1,6 @@
-// ═══════════════════════════════════════════════════════════
-//  header/api.js — публичный API (window.CH), баннер документов, авто-запуск
-// ═══════════════════════════════════════════════════════════
-//  Вынесено из монолитного header.js. Подключается ПОСЛЕДНИМ:
-//  здесь auto-init и загрузчик sig.js.
+// header/api.js — публичный API (window.CH), баннер документов, авто-запуск
+// Вынесено из монолитного header.js. Подключается ПОСЛЕДНИМ:
+// здесь auto-init и загрузчик sig.js.
 
 (function () {
   'use strict';
@@ -11,7 +9,7 @@
   const { t, esc, _s, _ensureI18nReady, _connectDmSocket, _playNotifSound,
     _mount, _renderHeaderRight, _buildDrawerLinks } = INT;
 
-  // ─── PUBLIC API ────────────────────────────────────────────────────────────
+  // PUBLIC API
   const CH = Object.assign(window.CH, {
 
     async initHeader(options = {}) {
@@ -214,7 +212,7 @@
   window.closeMobileNav  = () => CH.closeMobileNav();
   window.CH = CH;
 
-  // ── Баннер обновления документов (4.5) ───────────────────────────────────
+  // Баннер обновления документов
   const POLICY_VERSION = 'v1.1-2025-06-12';
   window.dismissPolicyBanner = function () {
     try { localStorage.setItem('ch_policy_seen', POLICY_VERSION); } catch {}
@@ -264,7 +262,7 @@
 
 })();
 
-// ── Сбор признаков окружения для защиты от мультиаккаунтов (см. /js/sig.js, privacy.html 2.4) ──
+// Сбор признаков окружения для защиты от мультиаккаунтов (см. /js/sig.js, privacy.html 2.4)
 // Грузим один раз на любой странице, где подключён хедер. Защита от двойной загрузки внутри sig.js.
 (function () {
   if (window.__chSig || document.querySelector('script[src="/js/sig.js"]')) return;

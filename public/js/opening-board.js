@@ -63,7 +63,7 @@
   const PROMOTION_PIECES = ['q', 'r', 'b', 'n'];
   const PROMOTION_LABEL = { q: 'Ферзь', r: 'Ладья', b: 'Слон', n: 'Конь' };
 
-  // ── Состояние партии ─────────────────────────────────────────────────────
+  // Состояние партии
   // history[i] = { state, move, san }; history[0].move/san всегда null
   let history = [{ state: ChessEngine.deepClone(ChessEngine.parseFEN(ChessEngine.START_FEN)), move: null, san: null }];
   let current = ChessEngine.deepClone(history[0].state);
@@ -74,11 +74,11 @@
   let lastMove = null;
   let pendingPromotion = null; // { from, to }
 
-  // ── ПКМ-аннотации (кружки и стрелки, как на lichess / board.js) ─────────
+  // ПКМ-аннотации (кружки и стрелки, как на lichess / board.js)
   let annotations = []; // { type: 'circle'|'arrow', sq?, from?, to? }
   let rmbStartSq = null; // квадрат, с которого началось нажатие ПКМ
 
-  // ── Web Worker ───────────────────────────────────────────────────────────
+  // Web Worker
   const worker = new Worker('/js/opening-worker.js');
   let requestId = 0;
   let lastRequestId = -1;
@@ -108,7 +108,7 @@
     showStatus('Внутренняя ошибка воркера: ' + e.message, true);
   });
 
-  // ── UI: поле FEN и кнопка ────────────────────────────────────────────────
+  // UI: поле FEN и кнопка
   els.button.addEventListener('click', () => loadFenFromInput());
   els.input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') loadFenFromInput();
@@ -154,7 +154,7 @@
     afterPositionChanged({ skipInputSync: true });
   }
 
-  // ── Координаты клеток ────────────────────────────────────────────────────
+  // Координаты клеток
   function squareName(sq) {
     const file = sq % 8;
     const rank = Math.floor(sq / 8);
@@ -173,7 +173,7 @@
     return ChessEngine.isAttacked(state, kingSq, ChessEngine.opposite(state.turn)) ? kingSq : null;
   }
 
-  // ── Отрисовка доски ──────────────────────────────────────────────────────
+  // Отрисовка доски
   function renderBoard() {
     const inCheckSq = findCheckSquare(current);
 
@@ -265,7 +265,7 @@
     renderPromotionPickerIfNeeded();
   }
 
-  // ── Аннотации: кружки и стрелки (ПКМ), тот же дизайн, что в board.js ────
+  // Аннотации: кружки и стрелки (ПКМ), тот же дизайн, что в board.js
   function sqToColRow(sq) {
     const file = sq % 8;
     const rank = Math.floor(sq / 8);
@@ -474,7 +474,7 @@
     afterPositionChanged();
   }
 
-  // ── Что происходит после ЛЮБОГО изменения позиции ───────────────────────
+  // Что происходит после ЛЮБОГО изменения позиции
   function afterPositionChanged(opts) {
     clearSelection();
     renderBoard();
@@ -500,7 +500,7 @@
     els.breadcrumb.textContent = text.trim();
   }
 
-  // ── Обмен с воркером ─────────────────────────────────────────────────────
+  // Обмен с воркером
   function runSearch(fen) {
     requestId += 1;
     lastRequestId = requestId;
@@ -520,7 +520,7 @@
     els.status.classList.toggle('od-status--error', !!isError);
   }
 
-  // ── Таблица результатов ─────────────────────────────────────────────────
+  // Таблица результатов
   function renderTable(moves, position) {
     if (!els.tableBody) return;
     els.tableBody.innerHTML = '';
@@ -602,7 +602,7 @@
   }
 
 
-  // ── Старт ────────────────────────────────────────────────────────────────
+  // Старт
   initAnnotationHandlers();
   els.input.value = ChessEngine.toFEN(current);
   renderBoard();

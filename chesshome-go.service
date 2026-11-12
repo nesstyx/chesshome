@@ -4,9 +4,11 @@ After=network.target
 
 [Service]
 Type=simple
-# Поменяй путь на тот, куда реально положишь проект на сервере
-WorkingDirectory=/root/chesshome-go
-ExecStart=/root/chesshome-go/chesshome-go
+# Укажи пользователя с минимальными правами и путь к проекту
+User=chesshome
+WorkingDirectory=/opt/chesshome-go
+ExecStart=/opt/chesshome-go/chesshome-go
+NoNewPrivileges=true
 Restart=on-failure
 Environment=GO_PORT=8081
 

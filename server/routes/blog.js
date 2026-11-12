@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/blog.js — блог (статьи, лайки, комментарии)
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного routes.js в рамках рефакторинга.
-//  Код маршрутов не изменён — только обёртка-регистратор.
+// routes/blog.js — блог (статьи, лайки, комментарии)
 
 const {
   jwt,
@@ -309,6 +305,7 @@ app.post('/api/blog/:id/comments', blogAuthMiddleware, rateLimit(limiterStrict),
 
   const ratKey = 'blogcmt_' + user.username.toLowerCase();
   if (!global._blogCmtRate) global._blogCmtRate = new Map();
+  if (global._blogCmtRate.size >= 10000) global._blogCmtRate.delete(global._blogCmtRate.keys().next().value);
   const last = global._blogCmtRate.get(ratKey) || 0;
   if (Date.now() - last < 20000) return res.status(429).json({ error: 'Не так быстро! Подождите 20 секунд' });
   global._blogCmtRate.set(ratKey, Date.now());
@@ -415,9 +412,9 @@ app.post('/api/blog/:id/comments/mod', blogAuthMiddleware, async (req, res) => {
 });
 
 
-// ── Список новостей / статья ─────────────────────────────────
+// Список новостей / статья
 
-// ── Blog API ──────────────────────────────────────────────────
+// Blog API
 function blogAuthMiddleware(req, res, next) {
   const auth = getAuthToken(req);
   if (!auth) return res.status(401).json({ error: 'Войдите, чтобы выполнить это действие' });
@@ -456,9 +453,7 @@ async function handleDeleteBlogPost(req, res) {
 }
 
 
-// ══════════════════════════════════════════════════════════════
-//  BLOG COMMENTS API
-// ══════════════════════════════════════════════════════════════
+// BLOG COMMENTS API
 
 function isBlogCommentAdmin(username) {
   return isSiteAdmin(username);

@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/storm.js — Puzzle Storm (серверные забеги)
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного routes.js в рамках рефакторинга.
-//  Код маршрутов не изменён — только обёртка-регистратор.
+// routes/storm.js — Puzzle Storm (серверные забеги)
 
 const {
   uuidv4,
@@ -131,7 +127,7 @@ app.post('/api/storm/finish', authMiddleware, rateLimit(limiterStrict), async (r
       if (v !== undefined && !Number.isFinite(Number(v))) return res.status(400).json({ error: 'Неверные данные' });
     }
 
-    // ── Авторитетный подсчёт результата ──
+    // Авторитетный подсчёт результата
     // 1) Забег должен быть начат через /api/storm/start этим же пользователем.
     const run = typeof runId === 'string' ? stormRuns.get(runId) : null;
     if (!run || run.userId !== req.user.userId) {

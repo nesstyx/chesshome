@@ -1,9 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  sockets/games.js — геймплей: ходы, финалы, сдача, ничьи, чат партии
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного sockets.js в рамках рефакторинга.
-//  Код обработчиков не изменён.
-
+// sockets/games.js — геймплей: ходы, финалы, сдача, ничьи, чат партии
 const {
   activeGames,
   endGameAuthoritative,
@@ -61,10 +56,16 @@ module.exports = function registerGames(socket) {
       try { const found = serverChess.findMove(game._board, moveObj); game._board = serverChess.applyMove(game._board, found); } catch (e) { console.warn('[make_move] applyMove error:', e); }
     }
     const now = Date.now();
-    if (game.lastMoveAt !== null && game.whiteTime !== undefined) {
+    // Пока действует дедлайн первого хода (первые два полухода), основное
+    // время не списывается и инкремент не начисляется — ровно то, что
+    // показывает клиент (часы стартуют со 2-го полного хода).
+    const firstMoveProtected = !!game.firstMoveDeadline && game.moves.length < 2;
+    if (!firstMoveProtected && game.lastMoveAt !== null && game.whiteTime !== undefined) {
       const elapsed = (now - game.lastMoveAt) / 1000;
-      if (pc === 'white') game.whiteTime = Math.max(0, game.whiteTime - elapsed + (game.tcIncrement || 0));
-      else                game.blackTime = Math.max(0, game.blackTime - elapsed + (game.tcIncrement || 0));
+      // Берсерк снимает инкремент только у того, кто его взял
+      const inc = (game.berserk && game.berserk[pc]) ? 0 : (game.tcIncrement || 0);
+      if (pc === 'white') game.whiteTime = Math.max(0, game.whiteTime - elapsed + inc);
+      else                game.blackTime = Math.max(0, game.blackTime - elapsed + inc);
     }
     if (!game._acMoveTimes)  game._acMoveTimes = { white: [], black: [] };
     if (!game._acSuspect)    game._acSuspect   = { white: 0, black: 0 };
@@ -117,7 +118,7 @@ module.exports = function registerGames(socket) {
     const norm = result === 'w' ? 'white' : result === 'b' ? 'black' : result;
     if (norm !== 'white' && norm !== 'black' && norm !== 'draw') return;
 
-    // ── Мат/пат — проверяем по реальной позиции на сервере, а не
+    // Мат/пат — проверяем по реальной позиции на сервере, а не
     // просто принимаем то, что прислал клиент.
     if (reason === 'checkmate' || reason === 'stalemate') {
       const board = game._board || serverChess.rebuildBoard(game.moves);
@@ -132,7 +133,7 @@ module.exports = function registerGames(socket) {
       }
     }
 
-    // ── Ничьи по правилам (50 ходов / недостаток материала / троекратное
+    // Ничьи по правилам (50 ходов / недостаток материала / троекратное
     // повторение позиции) — тоже перепроверяем по истории ходов, а не
     // просто верим клиенту.
     if (reason === 'threefold-repetition' || reason === 'fifty-move' || reason === 'insufficient-material') {
@@ -168,7 +169,6 @@ module.exports = function registerGames(socket) {
     if (!socket.username) return;
     const game = activeGames.get(gameId); if (!game) return;
     if (game.white !== socket.username && game.black !== socket.username) return;
-    // Двойной учёт (P1, устранено): хендлер больше не завершает партию сам
     // (свой delete из карт + recordGame + updateStats + finishTournamentGame),
     // а передаёт всё в единую авторитарную точку endGameAuthoritative — как
     // уже делают game_over и серверный тик часов. Она защищена флагом
@@ -196,7 +196,6 @@ module.exports = function registerGames(socket) {
     if (!socket.username) return;
     const game = activeGames.get(gameId); if (!game) return;
     if (game.white !== socket.username && game.black !== socket.username) return;
-    // Двойной учёт (P1, устранено): завершение — только через единую
     // авторитарную точку endGameAuthoritative (см. resign выше).
     await endGameAuthoritative(gameId, game, 'draw', 'agreement');
   });

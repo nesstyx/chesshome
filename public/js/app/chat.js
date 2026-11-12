@@ -1,9 +1,7 @@
-// ═══════════════════════════════════════════════════════════
-//  app/chat.js — глобальный чат: сообщения, упоминания, бан-модалка
-// ═══════════════════════════════════════════════════════════
-//  Вынесено из монолитного app.js в рамках рефакторинга.
-//  Код не изменён. Файл — классический скрипт в глобальной области,
-//  подключается после /js/app/core.js в исходном порядке следования.
+// app/chat.js — глобальный чат: сообщения, упоминания, бан-модалка
+// Вынесено из монолитного app.js в рамках рефакторинга.
+// Код не изменён. Файл — классический скрипт в глобальной области,
+// подключается после /js/app/core.js в исходном порядке следования.
 
 function appendChatMsg(name, message, isMine = false) {
   const chat = document.getElementById('chat-messages');
@@ -54,7 +52,7 @@ function sendChatMsg() {
 }
 
 
-// ─── ГЛОБАЛЬНЫЙ ЧАТ ──────────────────────────────────────────
+// ГЛОБАЛЬНЫЙ ЧАТ
 async function initGlobalChat() {
   const el = document.getElementById('global-chat-messages');
   if (!el) return;
@@ -119,7 +117,7 @@ async function initGlobalChat() {
   } catch {}
 }
 
-// ── История общего чата: при прокрутке к началу подгружаем более старые сообщения ──
+// История общего чата: при прокрутке к началу подгружаем более старые сообщения
 async function loadOlderGlobalChat() {
   const el = document.getElementById('global-chat-messages');
   if (!el || el._chatLoading || el._chatHasMore === false || !el._chatOldest) return;
@@ -226,7 +224,7 @@ function appendGlobalChatMsg(msg, scroll = true, target = null) {
   nameEl.onclick = () => openUserProfile(msg.username);
   header.appendChild(nameEl);
 
-  // ─── VIP-значок сразу после ника ─────────────────────────────
+  // VIP-значок сразу после ника
   if (msg.vip) {
     const vipImg = document.createElement('img');
     vipImg.src = '/img/vip.png';
@@ -236,7 +234,7 @@ function appendGlobalChatMsg(msg, scroll = true, target = null) {
     header.appendChild(vipImg);
   }
 
-  // ─── ЭМОДЗИ после ника (только если есть) ──────────────────
+  // ЭМОДЗИ после ника (только если есть)
   const emoji = msg.emoji || '';
   if (emoji) {
     const emojiSpan = document.createElement('span');
@@ -474,7 +472,7 @@ function flushPendingGlobalMsgs() {
   }
 }
 
-// ─── @MENTION HELPERS ─────────────────────────────────────────
+// @MENTION HELPERS
 function formatChatMessage(text) {
   if (!text) return '';
   // Экранируем HTML сначала
@@ -618,7 +616,7 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// ─── НАСТРОЙКИ ────────────────────────────────────────────────
+// НАСТРОЙКИ
 pages['settings'] = () => {
   const s = getSettings();
   const sounds = document.getElementById('set-sounds');

@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════
-//  header/right.js — правая часть хедера (юзер-меню) и «Друзья онлайн»
-// ═══════════════════════════════════════════════════════════
-//  Вынесено из монолитного header.js.
-
+// header/right.js — правая часть хедера (юзер-меню) и «Друзья онлайн»
 (function () {
   'use strict';
 
@@ -10,7 +6,7 @@
   const INT = CH._int;
   const { t, esc, _s, isAdmin, vipBadgeHTML, avatarHTML } = INT;
 
-  // ─── ФУНКЦИЯ ПОКАЗА ДРУЗЕЙ ОНЛАЙН ─────────────────────────────────────────
+  // ФУНКЦИЯ ПОКАЗА ДРУЗЕЙ ОНЛАЙН
   async function showOnlineFriends() {
     if (!_s.currentUser) {
       if (typeof toast === 'function') toast(t('header.toast_login_to_see_friends'), 'info');
@@ -42,10 +38,12 @@
           <div id="friends-list" style="max-height:300px;overflow-y:auto"></div>
         </div>`;
       const listDiv = modal.querySelector('#friends-list');
+      // Ник экранируется в текст и в data-атрибут, переход — через dataset
+      // + encodeURIComponent: значения в onclick-литерале небезопасны.
       listDiv.innerHTML = data.map(f => `
-        <div style="display:flex;align-items:center;gap:10px;padding:8px;border-bottom:1px solid var(--border);cursor:pointer" onclick="window.location='/profile/${f.username}'">
-          <div style="width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center">${f.username[0].toUpperCase()}</div>
-          <div style="flex:1;text-align:left"><b>${f.username}</b><br><span style="font-size:11px">★ ${f.rating}</span></div>
+        <div style="display:flex;align-items:center;gap:10px;padding:8px;border-bottom:1px solid var(--border);cursor:pointer" data-u="${esc(f.username || '')}" onclick="window.location='/profile/' + encodeURIComponent(this.dataset.u)">
+          <div style="width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center">${esc((f.username || '?')[0].toUpperCase())}</div>
+          <div style="flex:1;text-align:left"><b>${esc(f.username)}</b><br><span style="font-size:11px">★ ${Number(f.rating) || 1200}</span></div>
           <div style="width:8px;height:8px;border-radius:50%;background:#2ecc71"></div>
         </div>
       `).join('');
@@ -57,7 +55,7 @@
     }
   }
 
-  // ─── HEADER RIGHT ─────────────────────────────────────────────────────────
+  // HEADER RIGHT
   function _renderHeaderRight() {
     const el = document.getElementById('ch-header-right');
     if (!el) return;

@@ -1,13 +1,11 @@
-// ═══════════════════════════════════════════════════════════
-//  app/game.js — онлайн-партия: баннеры турниров, реджойн, старт UI
-// ═══════════════════════════════════════════════════════════
-//  Вынесено из монолитного app.js в рамках рефакторинга.
-//  Код не изменён. Файл — классический скрипт в глобальной области,
-//  подключается после /js/app/core.js в исходном порядке следования.
+// app/game.js — онлайн-партия: баннеры турниров, реджойн, старт UI
+// Вынесено из монолитного app.js в рамках рефакторинга.
+// Код не изменён. Файл — классический скрипт в глобальной области,
+// подключается после /js/app/core.js в исходном порядке следования.
 
 let _currentGameData = null; // текущие данные активной онлайн-игры для реджойна
 
-// ── PENDING TOURNAMENT GAME ──────────────────────────────────
+// PENDING TOURNAMENT GAME
 let _pendingTournamentGame = null;
 
 function showPendingTournamentBanner(data) {
@@ -62,7 +60,7 @@ function goToTournamentGame() {
   window.location.href = (data.isInterclub ? '/tournament/interclub/' : '/tournament/') + data.tournamentId;
 }
 
-// ── БАННЕР ВОЗВРАТА В ТУРНИР ─────────────────────────────────
+// БАННЕР ВОЗВРАТА В ТУРНИР
 function showTournamentReturnBanner(tournamentId, tournamentName, isInterclub) {
   document.getElementById('t-ret-banner')?.remove();
   const b = document.createElement('div');
@@ -128,4 +126,4 @@ function startGameUI(data) {
   }, 100);
 }
 
-// ─── GAME CHAT ────────────────────────────────────────────────
+// GAME CHAT

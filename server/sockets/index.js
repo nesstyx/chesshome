@@ -1,15 +1,11 @@
-// ═══════════════════════════════════════════════════════════════
-//  sockets/index.js — Socket.IO: точка входа реалтайм-событий
-// ═══════════════════════════════════════════════════════════════
-//  Раньше это был монолитный sockets.js (~850 строк). Теперь обработчики
-//  сгруппированы по доменам: worker, auth, tournaments, challenges,
-//  games, clubs, chat, disconnect — каждый в своём файле.
+// sockets/index.js — Socket.IO: точка входа реалтайм-событий
+// сгруппированы по доменам: worker, auth, tournaments, challenges,
+// games, clubs, chat, disconnect — каждый в своём файле.
 //
-//  ВАЖЕН ПОРЯДОК регистрации обработчиков внутри connection:
-//    1) worker-обработчики — ДО rate-limit обёртки (как в оригинале:
-//       воркеры не проходят общий socket-лимитер);
-//    2) затем обёртка socket.on (rate-limit + изоляция ошибок);
-//    3) затем все остальные домены.
+// ВАЖЕН ПОРЯДОК регистрации обработчиков внутри connection:
+// воркеры не проходят общий socket-лимитер);
+// 2) затем обёртка socket.on (rate-limit + изоляция ошибок);
+// 3) затем все остальные домены.
 
 const {
   io,
@@ -45,7 +41,7 @@ io.on('connection', (socket) => {
 
   if (!limiterSocketConnect.check(socketIP).allowed) { socket.disconnect(true); return; }
 
-  // ── Домашние worker-ы: аутентификация и джобы анализа ────────
+  // Домашние worker-ы: аутентификация и джобы анализа
   // (до обёртки socket.on — воркеры не лимитируются общим лимитером)
   registerWorker(socket, socketIP);
 
@@ -67,7 +63,7 @@ io.on('connection', (socket) => {
     });
   };
 
-  // ── Домены (порядок регистрации = исходный порядок sockets.js) ──
+  // Домены (порядок регистрации = исходный порядок sockets.js)
   registerAuth(socket, socketIP);
   registerTournaments(socket);
   registerChallenges(socket);

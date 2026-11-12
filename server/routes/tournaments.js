@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/tournaments.js — турниры (включая межклубные)
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного routes.js в рамках рефакторинга.
-//  Код маршрутов не изменён — только обёртка-регистратор.
+// routes/tournaments.js — турниры (включая межклубные)
 
 const {
   jwt,
@@ -164,7 +160,7 @@ app.post('/api/tournaments', authMiddleware, async (req, res) => {
 });
 
 
-// ── Создание межклубного турнира — теперь доступно любому пользователю ──
+// Создание межклубного турнира — теперь доступно любому пользователю
 app.post('/api/tournaments/interclub', authMiddleware, async (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Нет доступа' });
   const user = await getUser(req.user.username.toLowerCase());
@@ -188,7 +184,6 @@ app.post('/api/tournaments/interclub', authMiddleware, async (req, res) => {
   if (startTime > oneYearFromNow) return res.status(400).json({ error: 'Максимальная дата — через 1 год от сегодня' });
 
   // Обычным юзерам — не более 3 турниров в день (общий лимит с обычными
-  // турнирами — см. POST /api/tournaments — чтобы нельзя было обойти его,
   // просто создавая межклубники вместо обычных турниров).
   if (!isAdmin) {
     const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
@@ -257,7 +252,7 @@ app.post('/api/tournaments/:id/join', authMiddleware, rateLimit(limiterStrict), 
   const existing = t.participants.find(p => p.username === user.username);
   const isActive = getTournamentStatus(t, now) === 'active';
 
-  // ── Межклубный турнир: обязательный выбор команды ─────────────
+  // Межклубный турнир: обязательный выбор команды
   // Играть можно только за клуб, который заявлен в этом турнире И
   // в котором пользователь реально состоит на момент вступления.
   let teamId = null;
@@ -270,7 +265,6 @@ app.post('/api/tournaments/:id/join', authMiddleware, rateLimit(limiterStrict), 
     const inTeam = (team.members || []).map(m => m.toLowerCase()).includes(user.username.toLowerCase());
     if (!inTeam) return res.status(403).json({ error: `Вы не состоите в клубе «${team.name}»` });
     // Если игрок уже сыграл партии за одну команду — не даём переметнуться к другой
-    // (иначе можно было бы "сдать" очки не той команде, за которую реально играл).
     if (existing && existing.teamId && existing.gamesPlayed > 0 && existing.teamId !== requestedTeamId) {
       return res.status(400).json({ error: 'Вы уже играли в этом турнире за другую команду и не можете сменить её' });
     }
@@ -296,16 +290,14 @@ if (existing) {
   });
 }
 
-await saveTournament(t);
-io.to(`tournament_${t.id}`).emit('tournament_update', sanitizeTournament(t));
-
-// Если турнир активен — сразу пытаемся спарить
+// Если турнир активен — сразу пытаемся спарить (startTournamentGame
+// сохраняет турнир сам), затем один финальный save+broadcast.
 if (isActive) {
   tryPairTournamentPlayers(t);
 }
-  await saveTournament(t);
-  io.to(`tournament_${t.id}`).emit('tournament_update', sanitizeTournament(t));
-  res.json({ ok: true });
+await saveTournament(t);
+io.to(`tournament_${t.id}`).emit('tournament_update', sanitizeTournament(t));
+res.json({ ok: true });
 });
 
 
@@ -321,7 +313,7 @@ app.post('/api/tournaments/:id/leave', authMiddleware, async (req, res) => {
 });
 
 
-// ── Партии конкретного турнира (для просмотра/проверки) ───────
+// Партии конкретного турнира (для просмотра/проверки)
 app.get('/api/tournaments/:id/games', async (req, res) => {
   const t = tournaments.find(t => t.id === req.params.id);
   if (!t) return res.status(404).json({ error: 'Не найден' });
@@ -334,7 +326,7 @@ app.get('/api/tournaments/:id/games', async (req, res) => {
 });
 
 
-// ── Ручной античит-бан от администратора ─────────────────────
+// Ручной античит-бан от администратора
 app.post('/api/tournaments/:id/anticheat-ban', authMiddleware, async (req, res) => {
   await requireTournamentManager(req, res, async (t) => {
     const { username } = req.body;
@@ -392,7 +384,7 @@ app.delete('/api/tournaments/:id/blacklist/:username', authMiddleware, handleUnb
 app.post('/api/tournaments/:id/blacklist/:username/delete', authMiddleware, handleUnblacklistTournament);
 
 
-// ── Tournament Chat API ────────────────────────────────────────
+// Tournament Chat API
 app.get('/api/tournaments/:id/chat', authMiddleware, async (req, res) => {
   const t = tournaments.find(t => t.id === req.params.id);
   if (!t) return res.status(404).json({ error: 'Турнир не найден' });
@@ -495,7 +487,6 @@ app.post('/api/tournaments/:id/chat-unmute', authMiddleware, async (req, res) =>
 });
 
 
-
 async function handleEditTournament(req, res) {
   await requireTournamentManager(req, res, async (t) => {
     if (getTournamentStatus(t, Date.now()) === 'finished') return res.status(400).json({ error: 'Турнир завершён' });
@@ -508,7 +499,7 @@ async function handleEditTournament(req, res) {
     }
     if (b.description !== undefined) upd.description = String(b.description || '').trim().slice(0, 1000);
     if (b.timeControl !== undefined) {
-      if (typeof b.timeControl !== 'string' || !/^\d{1,3}(\.\d)?\+\d{1,2}(s)?$/.test(b.timeControl)) {
+      if (typeof b.timeControl !== 'string' || !parseTimeControl(b.timeControl)) {
         return res.status(400).json({ error: 'Неверный контроль времени (формат «10+0», «3+2»)' });
       }
       upd.timeControl = b.timeControl;
