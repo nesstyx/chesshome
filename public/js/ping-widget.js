@@ -7,14 +7,14 @@
 (function () {
   'use strict';
 
-  // ─── Конфиг ───────────────────────────────────────────────────────────────
+  // Конфиг
   const PING_INTERVAL_MS = 5000;   // как часто обновлять пинг
   const PING_URL         = '/api/ping'; // эндпоинт (см. ниже — fallback на '/')
   const GOOD_MS          = 100;    // ≤ 100 мс — зелёный
   const WARN_MS          = 250;    // ≤ 250 мс — жёлтый; > 250 — красный
   const PING_ITEM_ID     = 'ch-ping-item';
 
-  // ─── Измерение пинга ──────────────────────────────────────────────────────
+  // Измерение пинга
   async function measurePing() {
     const t0 = performance.now();
     try {
@@ -31,7 +31,7 @@
     return Math.round(performance.now() - t0);
   }
 
-  // ─── Цвет по значению ─────────────────────────────────────────────────────
+  // Цвет по значению
   function pingColor(ms) {
     if (ms === null) return '#ef4444';          // красный — нет связи
     if (ms <= GOOD_MS) return '#22c55e';        // зелёный
@@ -51,7 +51,7 @@
     return 'Плохое';
   }
 
-  // ─── Рендер элемента ──────────────────────────────────────────────────────
+  // Рендер элемента
   function buildPingEl(ms) {
     const color = pingColor(ms);
     const label = pingLabel(ms);
@@ -117,7 +117,7 @@
     if (el) el.title = pingQuality(ms) + ' соединение';
   }
 
-  // ─── Вставка в dropdown ───────────────────────────────────────────────────
+  // Вставка в dropdown
   /**
    * Ищет дропдаун пользователя (id="user-dropdown" или id="hdr-drop"),
    * находит последний <hr> (перед «Выйти») и вставляет пинг перед ним.
@@ -145,7 +145,7 @@
     drop.insertBefore(pingEl, lastHr);
   }
 
-  // ─── Цикл обновления ──────────────────────────────────────────────────────
+  // Цикл обновления
   let lastMs = null;
 
   async function tick() {

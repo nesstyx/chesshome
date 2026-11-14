@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/dev-diary.js — дневник разработки
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного routes.js в рамках рефакторинга.
-//  Код маршрутов не изменён — только обёртка-регистратор.
+// routes/dev-diary.js — дневник разработки
 
 const {
   jwt,
@@ -64,7 +60,7 @@ app.delete('/api/dev-diary/:id', authMiddleware, handleDeleteDevDiaryEntry);
 app.post('/api/dev-diary/:id/delete', authMiddleware, handleDeleteDevDiaryEntry);
 
 
-// ── Dev Diary: реакции ────────────────────────────────────────
+// Dev Diary: реакции
 // Таблицы создаются в main()
 
 app.get('/api/dev-diary/:entryId/reactions', async (req, res) => {
@@ -122,7 +118,7 @@ app.post('/api/dev-diary/:entryId/reactions', authMiddleware, async (req, res) =
 });
 
 
-// ── Dev Diary: комментарии ────────────────────────────────────
+// Dev Diary: комментарии
 
 app.get('/api/dev-diary/:entryId/comments', async (req, res) => {
   try {
@@ -199,7 +195,6 @@ app.post('/api/admin/dev-diary-comment-ban', authMiddleware, async (req, res) =>
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-
 
 
 async function handleDeleteDevDiaryEntry(req, res) {

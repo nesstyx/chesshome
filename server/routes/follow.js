@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/follow.js — подписки
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного routes.js в рамках рефакторинга.
-//  Код маршрутов не изменён — только обёртка-регистратор.
+// routes/follow.js — подписки
 
 const {
   db,
@@ -93,7 +89,6 @@ app.get('/api/follow/online-friends', authMiddleware, async (req, res) => {
   }
   res.json(online);
 });
-
 
 
 async function handleUnfollow(req, res) {

@@ -1,24 +1,21 @@
 'use strict';
-// ═══════════════════════════════════════════════════════════════
-//  puzzle.service.js — задачи: проверка ходов и рейтинг (Glicko-2)
-// ═══════════════════════════════════════════════════════════════
-//  Принципы:
-//   1) Сервер — единственный судья. Клиент шлёт только ход (UCI),
-//      позицию, шаг и результат ведёт сервер (сессия на пару
-//      «пользователь + задача»). Присланным «moveIndex» и списком
-//      ходов мы больше не пользуемся.
-//   2) Ход считается верным, если он совпал с решением (в решении
-//      можно писать варианты через «|») ИЛИ если он ставит мат.
-//      Поэтому у «мата в 1 ход» с двумя решениями засчитывается
-//      любой из них.
-//   3) Рейтинг считается один раз — за ПЕРВУЮ попытку пользователя
-//      в задаче (ошибка или решение, что наступит раньше). Повторы
-//      тренировочные: рейтинг не меняется. Рейтинг и у игрока, и у
-//      задачи обновляется по Glicko-2.
-//   4) Решение клиенту не отдаётся никогда.
+// puzzle.service.js — задачи: проверка ходов и рейтинг (Glicko-2)
+// Принципы:
+// 1) Сервер — единственный судья. Клиент шлёт только ход (UCI),
+// позицию, шаг и результат ведёт сервер (сессия на пару
+// «пользователь + задача»). Присланным «moveIndex» и списком
+// ходов мы больше не пользуемся.
+// 2) Ход считается верным, если он совпал с решением (в решении
+// можно писать варианты через «|») ИЛИ если он ставит мат.
+// Поэтому у «мата в 1 ход» с двумя решениями засчитывается
+// любой из них.
+// 3) Рейтинг считается один раз — за ПЕРВУЮ попытку пользователя
+// в задаче (ошибка или решение, что наступит раньше). Повторы
+// тренировочные: рейтинг не меняется. Рейтинг и у игрока, и у
+// задачи обновляется по Glicko-2.
+// 4) Решение клиенту не отдаётся никогда.
 //
-//  Состояние сессий хранится в памяти процесса (так же, как stormRuns).
-// ═══════════════════════════════════════════════════════════════
+// Состояние сессий хранится в памяти процесса (так же, как stormRuns).
 
 const { v4: uuidv4 } = require('uuid');
 
@@ -34,7 +31,7 @@ function D() {
   return deps;
 }
 
-// ── Параметры Glicko-2 ─────────────────────────────────────────
+// Параметры Glicko-2
 const SCALE = 173.7178;
 const TAU = 0.5;                 // «инерция» волатильности (0.3–1.2)
 const MAX_RD = 250;              // потолок неопределённости (в т.ч. после долгого простоя)
@@ -165,7 +162,7 @@ function publicPuzzleRating(row) {
   return Math.round(puzzleStateFromRow(row).rating);
 }
 
-// ── Схема БД (идемпотентно, выполняется один раз при старте) ───
+// Схема БД (идемпотентно, выполняется один раз при старте)
 let schemaPromise = null;
 function ensureSchema() {
   if (!schemaPromise) {
@@ -200,7 +197,7 @@ function ensureSchema() {
   return schemaPromise;
 }
 
-// ── Шахматная часть ────────────────────────────────────────────
+// Шахматная часть
 const UCI_RE = /^[a-h][1-8][a-h][1-8][qrbn]?$/;
 const stripAnno = (v) => String(v == null ? '' : v).replace(/[+#!?]/g, '').trim().toLowerCase();
 
@@ -213,9 +210,9 @@ function parseSolution(solution) {
 }
 
 // Судит ход решающего в позиции fen.
-//   { legal:false }                       — ход невозможен (штрафа нет)
-//   { fallback:true }                     — chess.js не смог разобрать FEN
-//   { legal:true, matches, mate, canon, fenAfter }
+// { legal:false }                       — ход невозможен (штрафа нет)
+// { fallback:true }                     — chess.js не смог разобрать FEN
+// { legal:true, matches, mate, canon, fenAfter }
 // matches — совпал с решением; mate — ход ставит мат.
 function judgeSolverMove(fen, uciRaw, expectedRaw) {
   const { Chess } = D();
@@ -261,7 +258,7 @@ function applyUci(fen, uciRaw) {
   } catch (e) { return null; }
 }
 
-// ── Сессии решения ─────────────────────────────────────────────
+// Сессии решения
 const sessions = new Map();           // `${userId}:${puzzleId}` -> session
 const SESSION_TTL_MS = 6 * 3600 * 1000;
 const SESSIONS_MAX = 50000;
@@ -366,10 +363,10 @@ async function markSolvedUnrated(userId, puzzleId) {
 }
 
 // Обработка хода игрока.
-//   { status:'restart' }  — сессии нет (например, перезапуск сервера)
-//   { status:'illegal' }  — невозможный ход, штрафа нет
-//   { status:'done' }     — задача уже решена в этой сессии
-//   { status:'ok', correct, finished, autoMove, rating }
+// { status:'restart' }  — сессии нет (например, перезапуск сервера)
+// { status:'illegal' }  — невозможный ход, штрафа нет
+// { status:'done' }     — задача уже решена в этой сессии
+// { status:'ok', correct, finished, autoMove, rating }
 async function handleMove(userId, puzzle, uciRaw, moveIndexHint) {
   let s = sessions.get(keyOf(userId, puzzle.id));
   if (!s) {
@@ -396,7 +393,7 @@ async function handleMove(userId, puzzle, uciRaw, moveIndexHint) {
     fenAfter = j.fenAfter;
   }
 
-  // ── Ошибка ──
+  // Ошибка
   if (!solved) {
     s.mistakes++;
     let rating = null;
@@ -408,7 +405,7 @@ async function handleMove(userId, puzzle, uciRaw, moveIndexHint) {
     return { status: 'ok', correct: false, finished: false, autoMove: null, rating };
   }
 
-  // ── Верный ход: задача окончена? ──
+  // Верный ход: задача окончена?
   const lastStep = s.step >= s.playerMoves.length - 1;
   let autoMove = null, nextFen = null, finished;
   if (mate || lastStep) {

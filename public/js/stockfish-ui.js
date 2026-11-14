@@ -1,6 +1,4 @@
-// ══════════════════════════════════════════════════════════════
-//  Chess Home — Модуль анализа Stockfish
-// ══════════════════════════════════════════════════════════════
+// Chess Home — Модуль анализа Stockfish
 
 const StockfishAnalyzer = (() => {
   const KEY = 'ch_sf_cfg';
@@ -13,7 +11,7 @@ const StockfishAnalyzer = (() => {
   const emit = (n, d) => document.dispatchEvent(new CustomEvent(n, { detail: d }));
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(cfg)); } catch (e) {} };
 
-  // ── жизненный цикл ──────────────────────────────────────
+  // жизненный цикл
   function init() {
     if (!cfg.enabled) { setStatus('off'); return false; }
     if (sf) return true;
@@ -51,7 +49,7 @@ const StockfishAnalyzer = (() => {
     if (sf && busy) sf.postMessage('stop');
   }
 
-  // ── запросы ─────────────────────────────────────────────
+  // запросы
   function analyze(fen, depth, force) {
     depth = depth || cfg.depth;
     if (!force && cur && cur.fen === fen && cur.depth === depth && (busy || usingRemote || lines.length)) return;
@@ -82,7 +80,7 @@ const StockfishAnalyzer = (() => {
     sf.postMessage('go depth ' + cur.depth);
   }
 
-  // ── разбор вывода UCI ───────────────────────────────────
+  // разбор вывода UCI
   function handle(line) {
     if (typeof line !== 'string') return;
     if (line.startsWith('option name ')) { const m = line.match(/^option name (\S+)/); if (m) opts[m[1]] = 1; }
@@ -119,7 +117,7 @@ const StockfishAnalyzer = (() => {
   }
   function handleRemoteUnavailable() { clearTimeout(remoteTimer); if (usingRemote) { usingRemote = false; local(); } }
 
-  // ── разбор всей партии (быстрый проход по позициям) ─────
+  // разбор всей партии (быстрый проход по позициям)
   const once = (fen, depth) => new Promise(res => { waiter = res; analyze(fen, depth, true); });
   async function review(fens, depth, onStep) {
     if (!cfg.enabled) return null;
@@ -129,7 +127,7 @@ const StockfishAnalyzer = (() => {
     return ev;
   }
 
-  // ── отображение ─────────────────────────────────────────
+  // отображение
   const pawns = l => l.mate !== null ? (l.mate > 0 ? 99 : -99) : l.cp / 100;
   const fmt = l => l.mate !== null ? (l.mate < 0 ? '-' : '') + 'M' + Math.abs(l.mate)
     : (l.cp > 0 ? '+' : '') + (l.cp / 100).toFixed(2);
@@ -193,7 +191,6 @@ function requestAnalysis() {
   StockfishAnalyzer.analyze(chessBoard.getViewFEN ? chessBoard.getViewFEN() : chessBoard.getFEN());
 }
 
-// ══════════════════════════════════════════════════════════════
 const AICommentator = (() => {
   let lastEval = null;      // последняя финальная оценка (перспектива белых)
   let lastPhraseAt = 0;     // антиспам: не чаще раза в 2.5 секунды

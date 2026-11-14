@@ -1,6 +1,4 @@
-// ══════════════════════════════════════════════════════════════
-//  Chess Home — Редактор позиции
-// ══════════════════════════════════════════════════════════════
+// Chess Home — Редактор позиции
 
 const BoardEditor = (() => {
   let board = Array(64).fill(null);
@@ -16,7 +14,7 @@ const BoardEditor = (() => {
     return fallback !== undefined ? fallback : key;
   }
 
-  // ─── ИНИЦИАЛИЗАЦИЯ ────────────────────────────────────────
+  // ИНИЦИАЛИЗАЦИЯ
   function initFromStart() {
     const st = ChessEngine.parseFEN(ChessEngine.START_FEN);
     board = [...st.board];
@@ -31,7 +29,7 @@ const BoardEditor = (() => {
     render();
   }
 
-  // ─── РЕНДЕР ДОСКИ ─────────────────────────────────────────
+  // РЕНДЕР ДОСКИ
   function render() {
     const el = document.getElementById('editor-board');
     if (!el) return;
@@ -77,7 +75,7 @@ const BoardEditor = (() => {
     updateFENInput();
   }
 
-  // ─── КЛИК ПО КЛЕТКЕ ────────────────────────────────────────
+  // КЛИК ПО КЛЕТКЕ
   // Логика:
   // 1. Ластик выбран → стираем фигуру
   // 2. Фигура из палитры выбрана → ставим её
@@ -127,7 +125,7 @@ const BoardEditor = (() => {
     render();
   }
 
-  // ─── DRAG & DROP ──────────────────────────────────────────
+  // DRAG & DROP
   let dragFrom = null;
 
   function handleEditorDragStart(e, sq) {
@@ -147,7 +145,7 @@ const BoardEditor = (() => {
     render();
   }
 
-  // ─── ПАЛИТРА ──────────────────────────────────────────────
+  // ПАЛИТРА
   function selectPalettePiece(type, color) {
     selectedPiece = { type, color };
     selectedSq = null; // снимаем выбор с доски
@@ -168,7 +166,7 @@ const BoardEditor = (() => {
     document.querySelectorAll('.palette-piece, .eraser-btn').forEach(b => b.classList.remove('selected'));
   }
 
-  // ─── FEN ──────────────────────────────────────────────────
+  // FEN
   function updateFENInput() {
     const state = boardToState();
     const fen = ChessEngine.toFEN(state);
@@ -217,7 +215,7 @@ const BoardEditor = (() => {
     } catch { toast(T('editor.fen_invalid', 'Неверный FEN'), 'error'); }
   }
 
-  // ─── АНАЛИЗ ───────────────────────────────────────────────
+  // АНАЛИЗ
   // Передаём FEN текущей позиции редактора на страницу анализа через
   function analyzePosition() {
     // Для анализа нужны оба короля — иначе позиция невалидна
@@ -239,7 +237,7 @@ const BoardEditor = (() => {
     toast(T('editor.analysis_started', 'Анализ позиции запущен!'), 'success');
   }
 
-  // ─── ПРОЧЕЕ ───────────────────────────────────────────────
+  // ПРОЧЕЕ
   function setTurn(color) {
     editorTurn = color;
     updateFENInput();
@@ -254,7 +252,7 @@ const BoardEditor = (() => {
     render();
   }
 
-  // ─── PUBLIC API ────────────────────────────────────────────
+  // PUBLIC API
   return {
     initFromStart,
     initEmpty,
@@ -271,7 +269,7 @@ const BoardEditor = (() => {
   };
 })();
 
-// ─── СТРАНИЦА РЕДАКТОРА ────────────────────────────────────────
+// СТРАНИЦА РЕДАКТОРА
 pages['editor'] = () => {
   // Строим палитру здесь — к этому моменту PIECE_IMGS точно загружен
   const TYPES = ['K', 'Q', 'R', 'B', 'N', 'P'];

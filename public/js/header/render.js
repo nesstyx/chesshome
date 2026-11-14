@@ -1,7 +1,5 @@
-// ═══════════════════════════════════════════════════════════
-//  header/render.js — сборка и монтаж DOM хедера/дровер/нижней навигации
-// ═══════════════════════════════════════════════════════════
-//  Вынесено из монолитного header.js.
+// header/render.js — сборка и монтаж DOM хедера/дровер/нижней навигации
+// Вынесено из монолитного header.js.
 
 (function () {
   'use strict';
@@ -10,7 +8,7 @@
   const INT = CH._int;
   const { t, esc, _s, NAV, SUPPORT_LINK, BOTTOM_NAV, _injectStyles } = INT;
 
-  // ─── СБОРКА NAV ───────────────────────────────────────────────────────────
+  // СБОРКА NAV
   function _buildDesktopNav() {
     const sections = NAV.map(sec => {
       const links = sec.items.map(item => {
@@ -72,7 +70,7 @@
     }).join('');
   }
 
-  // ─── МОНТИРОВАНИЕ ─────────────────────────────────────────────────────────
+  // МОНТИРОВАНИЕ
   function _mount() {
     _injectStyles();
     document.getElementById('ch-root')?.remove();

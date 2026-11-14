@@ -1,14 +1,12 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/blind.js — Blind Puzzle: тактика по памяти
-// ═══════════════════════════════════════════════════════════════
-//  Позицию показывают N секунд, затем фигуры скрываются, ходы вводятся
-//  «вслепую». Режим тренировочный:
-//    • рейтинг задач (Glicko-2) НЕ затрагивается — здесь нет ни
-//      startSession, ни handleMove, только stateless-судья
-//      (judgeSolverMove / applyUci), как в Puzzle Storm;
-//    • сервер — единственный судья; решение клиенту уходит только
-//      после окончания задачи;
-//    • результаты пишутся в отдельную таблицу blind_puzzle_stats.
+// routes/blind.js — Blind Puzzle: тактика по памяти
+// Позицию показывают N секунд, затем фигуры скрываются, ходы вводятся
+// «вслепую». Режим тренировочный:
+// • рейтинг задач (Glicko-2) НЕ затрагивается — здесь нет ни
+// startSession, ни handleMove, только stateless-судья
+// (judgeSolverMove / applyUci), как в Puzzle Storm;
+// • сервер — единственный судья; решение клиенту уходит только
+// после окончания задачи;
+// • результаты пишутся в отдельную таблицу blind_puzzle_stats.
 
 const {
   db,
@@ -24,7 +22,7 @@ const {
 const { parsePuzzleSolution } = require('./_shared');
 const puzzleService = require('../services/puzzle.service');
 
-// ── Уровни: время на запоминание ≠ сложность задачи (выбираются отдельно) ──
+// Уровни: время на запоминание ≠ сложность задачи (выбираются отдельно)
 const LEVELS = {
   easy:   { memorizeMs: 10000, points: 1, maxPieces: 12 },
   medium: { memorizeMs: 5000,  points: 2, maxPieces: 18 },
@@ -108,11 +106,11 @@ function revealPayload(s) {
 
 module.exports = function register(app) {
 
-  // ── Страница ────────────────────────────────────────────────
+  // Страница
   app.get('/blind-puzzle', (req, res) =>
     sendVersionedHtml(res, path.join(__dirname, '../../public/blind-puzzle.html')));
 
-  // ── Новая задача ────────────────────────────────────────────
+  // Новая задача
   app.get('/api/blind/puzzle', authMiddleware, rateLimit(limiterStrict), async (req, res) => {
     try {
       const level = String(req.query.level || '');
@@ -170,7 +168,7 @@ module.exports = function register(app) {
     } catch (e) { console.error('[Blind puzzle]', e.message); res.status(500).json({ error: 'Ошибка' }); }
   });
 
-  // ── Ход игрока ──────────────────────────────────────────────
+  // Ход игрока
   app.post('/api/blind/move', authMiddleware, rateLimit(limiterStrict), async (req, res) => {
     try {
       const { sessionId, uci } = req.body || {};
@@ -226,7 +224,7 @@ module.exports = function register(app) {
     } catch (e) { console.error('[Blind move]', e.message); res.status(500).json({ error: 'Ошибка' }); }
   });
 
-  // ── Статистика ──────────────────────────────────────────────
+  // Статистика
   function shapeStats(rows) {
     const levels = {};
     let points = 0, solved = 0, attempts = 0;

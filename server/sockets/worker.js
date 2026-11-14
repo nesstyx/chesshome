@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  sockets/worker.js — домашние worker-ы анализа (Stockfish) и воркер-сокеты
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного sockets.js в рамках рефакторинга.
-//  Код обработчиков не изменён.
+// sockets/worker.js — домашние worker-ы анализа (Stockfish) и воркер-сокеты
 
 const {
   uuidv4,
@@ -47,7 +43,7 @@ if (process.env.WORKER_SECRET && process.env.WORKER_SECRET.length < 24) {
 }
 
 module.exports = function registerWorker(socket, socketIP) {
-  // ── ДОМАШНИЙ WORKER: аутентификация по секретному токену ──────
+  // ДОМАШНИЙ WORKER: аутентификация по секретному токену
   // Если задан WORKER_SECRET в .env — принимаем воркер-подключения.
   // Если не задан вообще — фича просто выключена, ничего не ломается.
   socket.on('worker_auth', (payload) => {
@@ -101,7 +97,7 @@ module.exports = function registerWorker(socket, socketIP) {
     analyzeJobs.delete(msg.jobId);
   });
 
-  // ── Запрос анализа от обычного посетителя (страница «Анализ») ──
+  // Запрос анализа от обычного посетителя (страница «Анализ»)
   socket.on('analyze_request', ({ fen, depth }) => {
     if (typeof fen !== 'string' || fen.length > 100) return;
     const safeDepth = Number.isInteger(depth) ? Math.max(1, Math.min(depth, 30)) : 18;

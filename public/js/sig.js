@@ -15,7 +15,7 @@
 
   const API = '/api/sig';
 
-  // ── хэш ────────────────────────────────────────────────────────
+  // хэш
   async function sha(str) {
     try {
       const buf = new TextEncoder().encode(String(str));
@@ -47,7 +47,7 @@
     return Array.from(new Set(toks)).sort().join(' ');
   }
 
-  // ── сборщики (каждый возвращает строку или null) ───────────────
+  // сборщики (каждый возвращает строку или null)
   function glInfo() {
     try {
       const c = document.createElement('canvas');
@@ -169,7 +169,7 @@
     });
   }
 
-  // ── отправка ───────────────────────────────────────────────────
+  // отправка
   async function collect() {
     const out = {};
     const g = glInfo();

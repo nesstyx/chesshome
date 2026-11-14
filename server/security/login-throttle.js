@@ -1,7 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  security/login-throttle.js — анти-брутфорс логина
-// ═══════════════════════════════════════════════════════════════
-const LICHESS_TOKEN = process.env.LICHESS_API_TOKEN;
+// security/login-throttle.js — анти-брутфорс логина
 
 
 const loginFailStreaks = new Map();

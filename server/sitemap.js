@@ -33,16 +33,14 @@ const STATIC_PAGES = [
   '/analysis', '/editor', '/ai', '/stats', '/age', '/about', '/privacy', '/terms',
 ];
 
-// ═══════════════════════════════════════════════════════════════════════════
 // ★ ИСТОЧНИКИ ДИНАМИЧЕСКИХ СТРАНИЦ ★
 // Названия колонок в вашей БД мне неизвестны, поэтому запросы — SELECT *,
 // а нужные поля берутся с запасными вариантами (см. helpers ниже).
 // При первом запуске в консоль сервера выводится строка
-//   [sitemap] <имя>: колонки → ...
+// [sitemap] <имя>: колонки → ...
 // по ней запросы можно позже сузить до конкретных колонок.
-//   sql  — строка или массив запасных вариантов (берётся первый, что отработал и вернул строки)
-//   path — функция, строящая путь страницы; вернёт null → запись пропускается
-// ═══════════════════════════════════════════════════════════════════════════
+// sql  — строка или массив запасных вариантов (берётся первый, что отработал и вернул строки)
+// path — функция, строящая путь страницы; вернёт null → запись пропускается
 const SOURCES = {
   blog: {
     sql:  `SELECT * FROM blog_posts LIMIT 50000`,
@@ -54,7 +52,7 @@ const SOURCES = {
   },
   forum: {
     // Адрес темы: /forum/<slug>, например golosovanie-za-perestrojku-interfejsa-pr-1364ef
-    sql:  `SELECT * FROM forum_topics LIMIT 50000`,
+    sql:  `SELECT * FROM forum_threads LIMIT 50000`,
     path: r => r.slug && `/forum/${encodeURIComponent(r.slug)}`,
   },
   clubs: {
@@ -68,12 +66,12 @@ const SOURCES = {
   // Профили: включайте только осмысленные (например, с сыгранными партиями),
   // иначе будут тысячи почти пустых страниц.
   // profiles: {
-  //   sql:  `SELECT * FROM users WHERE games_played >= 20 LIMIT 50000`,
-  //   path: r => r.username && `/profile/${encodeURIComponent(r.username)}`,
+  // sql:  `SELECT * FROM users WHERE games_played >= 20 LIMIT 50000`,
+  // path: r => r.username && `/profile/${encodeURIComponent(r.username)}`,
   // },
 };
 
-// ─── helpers ────────────────────────────────────────────────────────────────
+// helpers
 const esc = s => String(s).replace(/[&<>"']/g,
   c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 
@@ -103,7 +101,7 @@ const urlset = list =>
   `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
   list.map(urlTag).join('\n') + `\n</urlset>\n`;
 
-// ─── router ─────────────────────────────────────────────────────────────────
+// router
 module.exports = function createSitemapRouter({ db, sources = SOURCES } = {}) {
   const router = express.Router();
 

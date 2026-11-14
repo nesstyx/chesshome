@@ -1,12 +1,10 @@
-// ══════════════════════════════════════════════════════════════
-//  Chess Home TV — Список всех активных партий на сайте
-//  Подключи в HTML: <script src="/js/tv.js"></script>
-//  Требует: socket.io, pieces.js, chess-engine.js
-// ══════════════════════════════════════════════════════════════
+// Chess Home TV — Список всех активных партий на сайте
+// Подключи в HTML: <script src="/js/tv.js"></script>
+// Требует: socket.io, pieces.js, chess-engine.js
 
 const ChessTV = (() => {
 
-  // ─── СОСТОЯНИЕ ────────────────────────────────────────────────
+  // СОСТОЯНИЕ
   let games        = [];       // массив активных партий с сервера
   let boardStates  = {};       // { gameId: ChessState }
   let updateTimer  = null;
@@ -14,7 +12,7 @@ const ChessTV = (() => {
   let autoRefresh  = true;
   const REFRESH_MS = 5000;     // обновлять список каждые 5 сек
 
-  // ─── ИНИЦИАЛИЗАЦИЯ ───────────────────────────────────────────
+  // ИНИЦИАЛИЗАЦИЯ
   function init(socketInstance) {
     socket = socketInstance || null;
 
@@ -43,7 +41,7 @@ const ChessTV = (() => {
     }
   }
 
-  // ─── ЗАГРУЗКА ДАННЫХ ─────────────────────────────────────────
+  // ЗАГРУЗКА ДАННЫХ
   async function fetchGames() {
     try {
       const res  = await fetch('/api/tv');
@@ -67,7 +65,7 @@ const ChessTV = (() => {
     if (updateTimer) { clearInterval(updateTimer); updateTimer = null; }
   }
 
-  // ─── РЕНДЕР СПИСКА ───────────────────────────────────────────
+  // РЕНДЕР СПИСКА
   function getContainer() {
     return document.getElementById('tv-game-list');
   }
@@ -135,7 +133,7 @@ const ChessTV = (() => {
     if (el) el.textContent = games.length;
   }
 
-  // ─── СОЗДАНИЕ КАРТОЧКИ ────────────────────────────────────────
+  // СОЗДАНИЕ КАРТОЧКИ
   function createGameCard(game) {
     const card = document.createElement('div');
     card.className = 'tv-card';
@@ -228,7 +226,7 @@ const ChessTV = (() => {
     '</div>';
   }
 
-  // ─── МИНИ-ДОСКА ───────────────────────────────────────────────
+  // МИНИ-ДОСКА
   function renderMiniBoard(gameId) {
     const el = document.getElementById('tv-board-' + gameId);
     if (!el) return;
@@ -257,21 +255,21 @@ const ChessTV = (() => {
   }
 
 
-  // ─── ОТКРЫТЬ ПАРТИЮ ───────────────────────────────────────────
+  // ОТКРЫТЬ ПАРТИЮ
   function openGame(gameId) {
     window.location.href = '/game/' + gameId;
   }
 
-  // ─── ОШИБКА ───────────────────────────────────────────────────
+  // ОШИБКА
   function showError(msg) {
     const c = getContainer();
     if (!c) return;
     c.innerHTML = '<div class="tv-empty"><div class="tv-empty-icon">⚠️</div><div class="tv-empty-title">' + escapeHtml(msg) + '</div></div>';
   }
 
-  // ─── УТИЛИТЫ ──────────────────────────────────────────────────
+  // УТИЛИТЫ
 
-  // ─── PUBLIC API ───────────────────────────────────────────────
+  // PUBLIC API
   return {
     init,
     refresh: fetchGames,
@@ -282,9 +280,7 @@ const ChessTV = (() => {
 
 })();
 
-// ═══════════════════════════════════════════════════════════════
-//  CSS — встроенные стили для TV (добавь <link> или оставь здесь)
-// ═══════════════════════════════════════════════════════════════
+// CSS — встроенные стили для TV (добавь <link> или оставь здесь)
 (function injectTVStyles() {
   if (document.getElementById('chess-tv-styles')) return;
   const style = document.createElement('style');

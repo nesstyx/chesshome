@@ -1,8 +1,6 @@
-// ═══════════════════════════════════════════════════════════════
-//  sockets/auth.js — аутентификация сокета по HttpOnly-cookie
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного sockets.js в рамках рефакторинга.
-//  Код обработчиков не изменён.
+// sockets/auth.js — аутентификация сокета по HttpOnly-cookie
+
+const crypto = require('crypto');
 
 const {
   parseCookieHeader,
@@ -48,6 +46,11 @@ module.exports = function registerAuth(socket, socketIP) {
 
     const user = await getUser(p.username.toLowerCase());
     if (user?.banned) { socket.emit('auth_error', 'Аккаунт заблокирован: ' + (user.banReason || 'нарушение правил')); socket.disconnect(); return; }
+    // Метка пароля: токен выпущен до последней смены пароля — сессия отозвана.
+    if (p.ph && user) {
+      const expectedPh = crypto.createHash('sha256').update(String(user.passwordHash || '')).digest('hex').slice(0, 12);
+      if (p.ph !== expectedPh) { socket.emit('auth_error', 'Сессия устарела, войдите заново'); socket.disconnect(); return; }
+    }
 
     socket.emit('auth_ok', { username: p.username });
     io.emit('online_count', onlineUsers.size);

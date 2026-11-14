@@ -2,6 +2,13 @@
 <html lang="ru">
 <head>
 <script src="/js/utils.js"></script>
+<script>
+  // Безопасная вставка строки в onclick-литерал (JS + HTML-атрибут)
+  function jsStr(s) {
+    return escapeHtml(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+  }
+</script>
+
 <script src="/js/api.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -568,7 +575,7 @@ function renderAuthorsModal() {
       <div class="author-row">
         <div class="a-av">${escapeHtml(a[0]||'?').toUpperCase()}</div>
         <span class="a-name">${escapeHtml(a)}</span>
-        <button class="btn btn-danger btn-sm" onclick="removeAuthor('${escapeHtml(a)}')">Снять</button>
+        <button class="btn btn-danger btn-sm" onclick="removeAuthor('${jsStr(a)}')">Снять</button>
       </div>`).join('');
   }
 }
@@ -737,9 +744,10 @@ async function openPost(id, noView) {
     if (post.status === 'published') {
       cbbWrap.style.display = 'block';
       apiGet('/news/'+id+'/comments')
-        .then(r=>r.json()).then(d=>{
+        .then(d=>{
+          const vis = (d.comments || []).filter(c => !c.deleted).length;
           const el = document.getElementById('cbb-count');
-          if (el) el.textContent = d.count > 0 ? d.count : '';
+          if (el) el.textContent = vis > 0 ? vis : '';
         }).catch(()=>{});
     } else {
       cbbWrap.style.display = 'none';

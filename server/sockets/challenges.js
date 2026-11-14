@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  sockets/challenges.js — вызовы (challenges): пул лобби и личные вызовы
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного sockets.js в рамках рефакторинга.
-//  Код обработчиков не изменён.
+// sockets/challenges.js — вызовы (challenges): пул лобби и личные вызовы
 
 const {
   uuidv4,
@@ -12,7 +8,7 @@ const {
   startGame,
 } = require('../core');
 
-// ── Жизненный цикл вызовов (challenges) ────────────────────────
+// Жизненный цикл вызовов (challenges)
 const CHALLENGE_TTL_MS = 60000;
 setInterval(() => {
   const now = Date.now();
@@ -75,7 +71,6 @@ module.exports = function registerChallenges(socket) {
     }
     socket._lastDirectChallengeAt = now;
     // Поддерживаем и старый формат вызова (просто ник строкой), и новый
-    // объект { username, rated } — чтобы можно было выбрать товарищескую партию.
     const targetUsername = typeof data === 'string' ? data : data?.username;
     const rated = typeof data === 'string' ? true : data?.rated !== false;
     if (typeof targetUsername !== 'string' || !targetUsername || targetUsername.length > 20) return;

@@ -521,7 +521,7 @@ async function loadTournaments(){
       el.innerHTML = `
         <div class="tour-main">
           <span class="tour-idx">${idx}</span>
-          ${t.url ? `<a href="${escapeHtml(t.url)}" target="_blank" rel="noopener">${escapeHtml(t.name || t.id)}</a>` : `<span class="tname">${escapeHtml(t.name || t.id)}</span>`}
+          ${(typeof t.url === 'string' && /^https?:\/\//i.test(t.url)) ? `<a href="${escapeHtml(t.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t.name || t.id)}</a>` : `<span class="tname">${escapeHtml(t.name || t.id)}</span>`}
         </div>
         <div class="tour-meta">${t.players} игроков · ${date}</div>
       `;

@@ -1,9 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/dm.js — личные сообщения
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного routes.js в рамках рефакторинга.
-//  Код маршрутов не изменён — только обёртка-регистратор.
-
+// routes/dm.js — личные сообщения
 const {
   uuidv4,
   db,
@@ -28,7 +23,6 @@ app.get('/api/dm/conversations', authMiddleware, async (req, res) => {
   const convMap = new Map();
   for (const m of msgs.rows) {
     // Сообщение теневого бана от partner'а мне — как будто его никогда не
-    // было: не создаёт (и не поднимает) беседу в списке. Свои же собственные
     // "невидимые" исходящие сообщения я по-прежнему вижу как обычно.
     if (m.shadow_hidden && m.from_user.toLowerCase() !== me) continue;
     const partner = m.from_user.toLowerCase() === me ? m.to_user : m.from_user;
@@ -109,13 +103,17 @@ app.post('/api/dm/send', authMiddleware, rateLimit(limiterStrict), async (req, r
 
   moderation.record({ username: me, channel: 'dm', text, target: to });
   const shadowHidden = !!meUser.shadowBanned;
-  const msg = { id: uuidv4(), from: me, to, text: text.trim(), ts: new Date().toISOString(), read: false, replyTo: replyToObj };
+  // В БД и realtime-событиях — канонический регистр ников: клиент сравнивает
+  // msg.to с currentUser.username строго, несовпадение регистра теряло сообщение.
+  const canonicalFrom = meUser.username;
+  const canonicalTo = toUser.username;
+  const msg = { id: uuidv4(), from: canonicalFrom, to: canonicalTo, text: text.trim(), ts: new Date().toISOString(), read: false, replyTo: replyToObj };
   await db('INSERT INTO dm_messages (id, from_user, to_user, text, ts, read, shadow_hidden, reply_to_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [msg.id, msg.from, msg.to, msg.text, msg.ts, msg.read, shadowHidden, replyToId]);
   // Теневой бан: получателю сообщение НЕ шлём вообще (для него это как будто
   // никогда не отправлялось) — только отправителю, чтобы у него всё выглядело
   // как обычная успешная отправка.
   if (!shadowHidden) {
-    const recipientSocket = findSocketByUsername(to);
+    const recipientSocket = findSocketByUsername(canonicalTo);
     if (recipientSocket) recipientSocket.emit('dm_message', msg);
   } else {
     emitToAdmins('dm_message', msg).catch(() => {});
@@ -137,14 +135,16 @@ app.post('/api/dm/read', authMiddleware, async (req, res) => {
 });
 
 
-// ── «печатает…»: просто пересылаем событие онлайн-собеседнику ──
+// «печатает…»: просто пересылаем событие онлайн-собеседнику
 const _typingAt = new Map();
+const _typingAtMax = 10_000;   // потолок карты: старые ключи вытесняются первыми
 app.post('/api/dm/typing', authMiddleware, async (req, res) => {
   const me = req.user.username;
   const to = String(req.body.to || '');
   const key = me.toLowerCase();
   const now = Date.now();
   if (!to || to.toLowerCase() === key || isSystemSender(to) || now - (_typingAt.get(key) || 0) < 1500) return res.json({ ok: true });
+  if (_typingAt.size >= _typingAtMax) _typingAt.delete(_typingAt.keys().next().value);
   _typingAt.set(key, now);
   const meUser = await getUser(key);
   if (meUser && !meUser.banned && !meUser.shadowBanned) {
@@ -176,12 +176,12 @@ app.post('/api/dm/unblock', authMiddleware, async (req, res) => {
 });
 
 
-// ── Системные сообщения: админ → одному пользователю или всем ──
+// Системные сообщения: админ → одному пользователю или всем
 // Приходят как обычные ЛС от имени SYSTEM_SENDER, но получатель не
 // может на них ответить (фронтенд прячет поле ввода для этого
 // отправителя, а /api/dm/send выше отдельно блокирует запись ЕМУ).
 
-// ── DM: Личные Сообщения ──────────────────────────────────────
+// DM: Личные Сообщения
 function dmRoomKey(a, b) { return [a.toLowerCase(), b.toLowerCase()].sort().join('::'); }
 
 

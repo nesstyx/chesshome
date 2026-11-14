@@ -1,9 +1,7 @@
-// ═══════════════════════════════════════════════════════════════
-//  http/versioned-html.js — cache-busting для /js/*.js внутри HTML
-// ═══════════════════════════════════════════════════════════════
+// http/versioned-html.js — cache-busting для /js/*.js внутри HTML
 const fs = require('fs');
 
-// ── Cache-busting для /js/*.js внутри HTML ─────────────────────
+// Cache-busting для /js/*.js внутри HTML
 // Проблема, которую это решает: браузер кэширует /js/app.js на 1 час
 // (см. maxAge статики ниже). HTML при этом всегда отдаётся свежим
 // (no-store), но <script src="/js/app.js"> — это один и тот же URL,

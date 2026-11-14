@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  sockets/chat.js — глобальный чат: анти-спам, фильтры, автобаны
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного sockets.js в рамках рефакторинга.
-//  Код обработчиков не изменён.
+// sockets/chat.js — глобальный чат: анти-спам, фильтры, автобаны
 
 const {
   uuidv4,
@@ -26,7 +22,7 @@ const {
 const moderation = require('../moderation');
 
 module.exports = function registerChat(socket, socketIP) {
-// ── Фильтр глобального чата ─────────────────────────────────────
+// Фильтр глобального чата
 // Та же логика, что уже используется на клиенте (app.js:containsBadWords).
 const MAT_WORDS_CHAT = [
   'блять','блядь','бля','пиздец','пизда','пизду','пизды',
@@ -80,7 +76,7 @@ function chatMessageHasBadWords(text) {
     const text = (typeof message === 'string' ? message : '').trim().slice(0, 300); if (!text) return;
     const now = Date.now();
 
-    // ── Анти-спам-счётчики проверяем СИНХРОННО и ДО await getUser.
+    // Анти-спам-счётчики проверяем СИНХРОННО и ДО await getUser.
     if (!socket._chatMsgs) socket._chatMsgs = [];
     socket._chatMsgs = socket._chatMsgs.filter(t => now - t < 10000); socket._chatMsgs.push(now);
     if (socket._chatMsgs.length > 10) { socket.emit('error', 'Вы временно отключены за спам в чате'); socket.disconnect(); return; }

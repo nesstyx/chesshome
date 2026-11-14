@@ -1,13 +1,10 @@
-// ═══════════════════════════════════════════════════════════════
-//  security/ip-bans.js — IP/Device баны (хранилище + middleware)
-// ═══════════════════════════════════════════════════════════════
-//  Списки банов в памяти + загрузка/сохранение в БД + middleware
-//  для защиты регистрации (раньше жили в core.js).
+// security/ip-bans.js — IP/Device баны (хранилище + middleware)
+// Списки банов в памяти + загрузка/сохранение в БД + middleware
 
 const { db } = require('../db');
 const { getIP, isLocalIP } = require('../http/client-ip');
 
-// ── IP-БАН ────────────────────────────────────────────────────
+// IP-БАН
 const bannedIPs     = new Set();
 
 const bannedDevices = new Set();
@@ -46,7 +43,7 @@ async function removeBanFromDB(ip, deviceId) {
 }
 
 
-// ── IP-БАН middleware ─────────────────────────────────────────
+// IP-БАН middleware
 function ipBanMiddleware(req, res, next) {
   const ip = getIP(req);
   const deviceId = req.deviceId; // сервер сам выдаёт и хранит device id в HttpOnly-cookie

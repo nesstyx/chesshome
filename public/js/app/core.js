@@ -1,17 +1,13 @@
-// ═══════════════════════════════════════════════════════════
-//  app/core.js — ядро: сокет, авторизация, страницы, модалки, зал вызовов
-// ═══════════════════════════════════════════════════════════
-//  Вынесено из монолитного app.js в рамках рефакторинга.
-//  Код не изменён. Файл — классический скрипт в глобальной области,
-//  подключается после /js/app/core.js в исходном порядке следования.
+// app/core.js — ядро: сокет, авторизация, страницы, модалки, зал вызовов
+// Вынесено из монолитного app.js в рамках рефакторинга.
+// Код не изменён. Файл — классический скрипт в глобальной области,
+// подключается после /js/app/core.js в исходном порядке следования.
 
-// ══════════════════════════════════════════════════════════════
-//  Chess Home — Главный файл приложения
-// ══════════════════════════════════════════════════════════════
+// Chess Home — Главный файл приложения
 
 // HTTP-клиент (apiGet/apiPost/parseApiResponse) и фильтр чата
 // (MAT_WORDS/SPAM_WORDS/normalizeWord/normalize/containsBadWords)
-// вынесены в общие модули /js/api.js и /js/utils.js (2А, 2В — унификация):
+// вынесены в общие модули /js/api.js и /js/utils.js:
 // index.html подключает их до app.js, глобальные имена доступны и здесь.
 
 let socket = null;
@@ -43,17 +39,17 @@ function toggleLoginPasswordVisibility(btn) {
 const STREAMERS = ['VLAD', 'Solo', 'aaa', 'GGbers'];
 
 
-// ─── ФИЛЬТР ЧАТА ───────────────────────────────────────────
+// ФИЛЬТР ЧАТА
 // Мат / реальные ругательства. Убрал сюда генерические оскорбления
 // ("дебил","идиот","тварь","урод","мразь","чмо","аутист","даун",
 // "жиробас") — это токсичность, а не мат, они были причиной того что
 // фильтр казался слишком строгим. Настоящие ругательства остаются
 // под запретом.
 // ФИЛЬТР ЧАТА (MAT_WORDS/SPAM_WORDS/normalizeWord/normalize/
-// containsBadWords) вынесен в /js/utils.js (2В, унификация) —
+// containsBadWords) вынесен в /js/utils.js —
 // единая реализация работает и в лобби, и в клубах.
 
-// ─── ROUTER ───────────────────────────────────────────────────
+// ROUTER
 const pages = {};
 
 function showPage(name) {
@@ -87,13 +83,13 @@ function showPage(name) {
   history.pushState({}, '', '/' + (name === 'home' ? '' : name));
 }
 
-// ─── API ──────────────────────────────────────────────────────
-// apiGet/apiPost/parseApiResponse вынесены в /js/api.js (2А, унификация):
+// API
+// apiGet/apiPost/parseApiResponse вынесены в /js/api.js:
 // единый HTTP-клиент для SPA и всех standalone-страниц.
 
-// ─── TOAST ────────────────────────────────────────────────────
+// TOAST
 
-// ─── AUTH ──────────────────────────────────────────────────────
+// AUTH
 function updateAuthUI() {
   // Делегируем в универсальный хедер (header.js / window.CH)
   if (window.CH) {
@@ -173,7 +169,6 @@ async function logout() {
   updateAuthUI(); showPage('home');
   toast('До свидания! 👋');
 }
-// -----------------------------------------------------------------
 async function tryAutoLogin() {
   // Токен хранится только в HttpOnly cookie — JS не может её прочитать,
   // поэтому просто спрашиваем сервер, есть ли валидная сессия.
@@ -195,7 +190,7 @@ async function refreshCurrentUser() {
   } catch {}
 }
 
-// ─── SOCKET ───────────────────────────────────────────────────
+// SOCKET
 let _socketAuthed = false;
 let _pendingGlobalMsgs = [];
 
@@ -269,7 +264,7 @@ function connectSocket() {
     chessBoard.resyncFromServer(data);
   });
   socket.on('incoming_challenge', ({ from, socketId, rated, timeControl }) => showIncomingChallenge(from, socketId, rated, timeControl));
-  // ── Анализ через домашний воркер (см. worker-client/) ──────────
+  // Анализ через домашний воркер (см. worker-client/)
   // Сервер прислал сырую UCI-строку от настоящего Stockfish на вашем
   // ПК — просто отдаём её тому же парсеру, что обрабатывает и локальный
   // движок в браузере (см. stockfish-ui.js:handleMessage).
@@ -301,7 +296,7 @@ function connectSocket() {
   });
   socket.on('game_chat', ({ from, message }) => appendChatMsg(from, message, false));
 
-  // ── Реджойн: восстанавливаем чат после перезагрузки страницы ──
+  // Реджойн: восстанавливаем чат после перезагрузки страницы
   socket.on('rejoin_ack', (data) => {
     if (data.chatMessages && data.chatMessages.length > 0) {
       // Восстанавливаем чат — board.js уже умеет это делать
@@ -368,7 +363,7 @@ function connectSocket() {
     }
   });
 
-  // ─── ЛС: уведомление на любой странице кроме /inbox ─────────
+  // ЛС: уведомление на любой странице кроме /inbox
   socket.on('dm_message', (msg) => {
     if (msg.to !== currentUser?.username) return;
     if (window.location.pathname.startsWith('/inbox')) return;
@@ -376,7 +371,7 @@ function connectSocket() {
   });
 }
 
-// ─── МОБИЛЬНОЕ МЕНЮ (делегируем в CH из header.js) ──────────────────────────
+// МОБИЛЬНОЕ МЕНЮ (делегируем в CH из header.js)
 function toggleMobileNav() {
   if (window.CH) CH.openMobileNav();
 }
@@ -388,7 +383,7 @@ function closeMobileNav() {
 // Закрывать мобильное меню по Escape и свайпу назад
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMobileNav(); });
 
-// ─── MODALS ───────────────────────────────────────────────────
+// MODALS
 function openModal(id)  {
   document.getElementById(id)?.classList.add('open');
 }
@@ -400,7 +395,7 @@ document.addEventListener('click', (e) => {
   if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('open');
 });
 
-// ─── ONLINE COUNT ─────────────────────────────────────────────
+// ONLINE COUNT
 async function fetchOnline() {
   try {
     const d = await apiGet('/online');
@@ -419,7 +414,7 @@ async function fetchOnline() {
 }
 
 
-// ─── LOBBY ────────────────────────────────────────────────────
+// LOBBY
 let selectedTC = '10+0';
 let selectedColor = 'random';
 let selectedRated = true;
@@ -560,5 +555,4 @@ function showIncomingChallenge(from, socketId, rated = true, timeControl = '10+0
   if (accept) socket.emit('accept_direct_challenge', { fromSocketId: socketId, rated });
   else socket.emit('decline_challenge', socketId);
 }
-// -----------------------------------------------------------------------------------------------------------------
-// ─── ПОИСК И ПРОФИЛИ ИГРОКОВ ──────────────────────────────────
+// ПОИСК И ПРОФИЛИ ИГРОКОВ

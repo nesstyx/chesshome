@@ -1,7 +1,5 @@
-// ═══════════════════════════════════════════════════════════
-//  header/styles.js — CSS хедера (инжектится тегом <style>)
-// ═══════════════════════════════════════════════════════════
-//  Вынесено из монолитного header.js (~490 строк CSS-шаблона).
+// header/styles.js — CSS хедера (инжектится тегом <style>)
+// Вынесено из монолитного header.js (~490 строк CSS-шаблона).
 
 (function () {
   'use strict';
@@ -9,7 +7,7 @@
   const CH = window.CH;
   const INT = CH._int;
 
-  // ─── СТИЛИ ────────────────────────────────────────────────────────────────
+  // СТИЛИ
   function _injectStyles() {
     if (document.getElementById('ch-styles')) return;
     const s = document.createElement('style');
@@ -18,7 +16,7 @@
     document.head.appendChild(s);
   }
 
-  // ─── CSS ──────────────────────────────────────────────────────────────────
+  // CSS
   const CSS = `
     #ch-root *, #ch-root *::before, #ch-root *::after { box-sizing: border-box; }
     #ch-root { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; }

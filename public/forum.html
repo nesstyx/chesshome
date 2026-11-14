@@ -324,6 +324,16 @@ function timeAgo(ts){
   return new Date(ts).toLocaleDateString(CH_I18N.getLang()==='ru'?'ru':'en',{day:'numeric',month:'short',year:'numeric'});
 }
 
+// Внешние ссылки из markdown — только в новой вкладке и без window.opener
+if(typeof DOMPurify!=='undefined'){
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if(node.tagName==='A' && node.getAttribute('href') && /^https?:/i.test(node.getAttribute('href'))){
+      node.setAttribute('target','_blank');
+      node.setAttribute('rel','noopener noreferrer nofollow');
+    }
+  });
+}
+
 function mdRender(text){
   if(!text)return'';
   try{

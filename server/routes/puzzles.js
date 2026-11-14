@@ -1,9 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/puzzles.js — задачи: каталог, решение, рейтинг
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного routes.js в рамках рефакторинга.
-//  Код маршрутов не изменён — только обёртка-регистратор.
-
+// routes/puzzles.js — задачи: каталог, решение, рейтинг
 const {
   jwt,
   uuidv4,
@@ -74,7 +69,10 @@ app.get('/api/puzzles/daily', async (req, res) => {
     if (!r.rows.length) return res.json(null);
     const puzzle = r.rows[0];
     const payload = { id: puzzle.id, title: puzzle.title, description: puzzle.description, fen: puzzle.fen, topic: puzzle.topic, difficulty: puzzle.difficulty };
-    dailyPuzzleCache = { day: dayIndex, payload };
+    // Мутируем общий кэш: объект импортирован через const из _shared.js,
+    // переприсваивание здесь бросило бы TypeError: Assignment to constant variable.
+    dailyPuzzleCache.day = dayIndex;
+    dailyPuzzleCache.payload = payload;
     res.json(payload);
   } catch(e) { res.status(500).json({ error: 'Ошибка' }); }
 });
@@ -166,7 +164,7 @@ app.get('/api/puzzles/:id', async (req, res) => {
 });
 
 
-// ── Задачи: сервер — единственный судья ─────────────────────────
+// Задачи: сервер — единственный судья
 // Позицию, шаг и результат ведёт сервер (сессия «пользователь + задача»).
 // Клиент шлёт только ход. Мат засчитывается всегда. Рейтинг — Glicko-2,
 // один раз за первую попытку. Подробности: services/puzzle.service.js.
@@ -259,11 +257,9 @@ app.post('/api/puzzles/:id/attempt', authMiddleware, rateLimit(limiterStrict), a
 });
 
 
-// ══════════════════════════════════════════════════════════════
-//  PUZZLE STORM API — старый анонимный эндпоинт с УТЕЧКОЙ РЕШЕНИЙ
+// PUZZLE STORM API — старый анонимный эндпоинт с УТЕЧКОЙ РЕШЕНИЙ
 
-// ══════════════════════════════════════════════════════════════
-//  PUZZLE STORM API
+// PUZZLE STORM API
 //
 
 
@@ -281,7 +277,6 @@ app.post('/api/admin/puzzles', authMiddleware, async (req, res) => {
 app.delete('/api/admin/puzzles/:id', authMiddleware, handleDeletePuzzle);
 
 app.post('/api/admin/puzzles/:id/delete', authMiddleware, handleDeletePuzzle);
-
 
 
 async function handleDeletePuzzle(req, res) {

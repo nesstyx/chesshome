@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/reports.js — жалобы
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного routes.js в рамках рефакторинга.
-//  Код маршрутов не изменён — только обёртка-регистратор.
+// routes/reports.js — жалобы
 
 const {
   uuidv4,
@@ -75,7 +71,6 @@ app.get('/api/admin/reports', authMiddleware, async (req, res) => {
 app.patch('/api/admin/reports/:reportId', authMiddleware, handleUpdateReportStatus);
 
 app.post('/api/admin/reports/:reportId/status', authMiddleware, handleUpdateReportStatus);
-
 
 
 async function handleUpdateReportStatus(req, res) {

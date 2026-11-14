@@ -1,19 +1,16 @@
-// ═══════════════════════════════════════════════════════════════
-//  services/tournament.service.js — турниры: состояние, пары, часы
-// ═══════════════════════════════════════════════════════════════
-//  Список турниров, персистентность, жеребьёвка (tryPairTournamentPlayers),
-//  турнирные партии и их финалы, межклубные команды, античит-компенсации
-//  и 3-секундный тик обслуживания.
-//  Доступ к общим объектам (io, usersCache, clubs, findSocketByUsername)
-//  — ленивый через require('../core') и require('./game.service').
-// ═══════════════════════════════════════════════════════════════
+// services/tournament.service.js — турниры: состояние, пары, часы
+// Список турниров, персистентность, жеребьёвка (tryPairTournamentPlayers),
+// турнирные партии и их финалы, межклубные команды, античит-компенсации
+// и 3-секундный тик обслуживания.
+// Доступ к общим объектам (io, usersCache, clubs, findSocketByUsername)
+//ленивый через require('../core') и require('./game.service').
 
 const { db } = require('../db');
 
 const gameService = require('./game.service');
 
 
-// ── Турниры ───────────────────────────────────────────────────
+// Турниры
 const tournaments = [];
 
 async function loadTournaments() {
@@ -60,7 +57,7 @@ async function deleteTournamentFromDB(id) {
 }
 
 
-// ── Межклубные турниры ────────────────────────────────────────
+// Межклубные турниры
 // Отдельная разновидность турнира: несколько клубов ("команд") заявлены
 // заранее (по ссылкам на их страницы), создать такой турнир может только
 // сайт-админ, участвовать можно только за клуб, в котором реально состоишь,
@@ -255,7 +252,10 @@ function startTournamentGame(tournament, p1, p2) {
     id: gameId, tournamentId: tournament.id, white, black,
     turn: 'white', moves: [], createdAt: now, lastActivity: now,
     timeControl: tournament.timeControl, whiteTime: tcSecT, blackTime: tcSecT,
-    tcIncrement: tcIncT || 0, lastMoveAt: now,
+    // lastMoveAt = null, как в товарищеской партии: до первого хода основные
+    // часы стоят (и на сервере, и у клиента), первый полуход ограничен
+    // только дедлайном firstMoveDeadline.
+    tcIncrement: tcIncT || 0, lastMoveAt: null,
     berserk: { white: false, black: false }, moveCounts: { white: 0, black: 0 },
     _board: gameService.serverChess.startBoard(),
     firstMoveDeadline: now + FIRST_MOVE_TIMEOUT,

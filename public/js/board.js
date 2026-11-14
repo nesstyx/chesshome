@@ -1,9 +1,7 @@
-// ══════════════════════════════════════════════════════════════
-//  Chess Home — Компонент шахматной доски
-// ══════════════════════════════════════════════════════════════
+// Chess Home — Компонент шахматной доски
 
 const chessBoard = (() => {
-  // ─── СОСТОЯНИЕ ──────────────────────────────────────────────
+  // СОСТОЯНИЕ
   let state = ChessEngine.parseFEN(ChessEngine.START_FEN);
   let playerColor = 'w';
   let selectedSq = null;
@@ -40,14 +38,14 @@ const chessBoard = (() => {
   let premove = null; // { from, to, promotion? }
   let premoveSquares = []; // [from, to] для подсветки
 
-  // ─── ПКМ-АННОТАЦИИ (кружки и стрелки, как на lichess) ────
+  // ПКМ-АННОТАЦИИ (кружки и стрелки, как на lichess)
   let annotations = []; // { type: 'circle'|'arrow', sq?, from?, to? }
   let rmbStartSq = null; // квадрат с которого началось нажатие ПКМ
 
   // PIECE_IMGS comes from pieces.js (inline SVG, no external requests)
 
-  // ─── РЕНДЕР ДОСКИ ─────────────────────────────────────────
-  // ─── РАЗМЕР ДОСКИ ──────────────────────────────────────────
+  // РЕНДЕР ДОСКИ
+  // РАЗМЕР ДОСКИ
   let _boardPx = (() => {
     const v = parseInt(localStorage.getItem('ch_board_size') || '0');
     return v >= 280 && v <= 800 ? v : 0;
@@ -83,7 +81,7 @@ const chessBoard = (() => {
       updateSliderFill();
     });
 
-    // ── Ручка-растяжка в углу доски (как на lichess) ──────────
+    // Ручка-растяжка в углу доски (как на lichess)
     initResizeHandle();
   }
 
@@ -230,10 +228,10 @@ const chessBoard = (() => {
     }
     board.innerHTML = squares.join('');
 
-    // ─── SVG-оверлей для аннотаций (кружки/стрелки) ────────
+    // SVG-оверлей для аннотаций (кружки/стрелки)
     renderAnnotationsSVG(board);
 
-    // ─── ПКМ: обработчики мыши на доске ────────────────────
+    // ПКМ: обработчики мыши на доске
     board.oncontextmenu = (e) => e.preventDefault();
     board.onmousedown = (e) => {
       if (e.button !== 2) return;
@@ -295,7 +293,7 @@ const chessBoard = (() => {
     document.dispatchEvent(new CustomEvent('board:render'));
   }
 
-  // ─── АННОТАЦИИ: кружки и стрелки ─────────────────────────
+  // АННОТАЦИИ: кружки и стрелки
   function toggleCircle(sq) {
     const idx = annotations.findIndex(a => a.type === 'circle' && a.sq === sq);
     if (idx >= 0) annotations.splice(idx, 1);
@@ -382,7 +380,7 @@ const chessBoard = (() => {
     return ChessEngine.isAttacked(st, kingSq, ChessEngine.opposite(st.turn)) ? kingSq : null;
   }
 
-  // ─── КЛИК ПО КЛЕТКЕ ────────────────────────────────────────
+  // КЛИК ПО КЛЕТКЕ
   function handleClick(sq) {
     if (viewingMove !== -1) return;
     clearAnnotations(); // ЛКМ сбрасывает все аннотации
@@ -390,7 +388,7 @@ const chessBoard = (() => {
     const piece = state.board[sq];
     const isMyTurn = gameMode !== 'online' || state.turn === playerColor;
 
-    // ── ОНЛАЙН: не наш ход → устанавливаем преймув ──────────
+    // ОНЛАЙН: не наш ход → устанавливаем преймув
     if (gameMode === 'online' && !isMyTurn) {
       if (selectedSq === null) {
         // Выбираем свою фигуру для преймува
@@ -581,7 +579,7 @@ const chessBoard = (() => {
     }
   }
 
-  // ─── DRAG & DROP ───────────────────────────────────────────
+  // DRAG & DROP
   let dragFromSq = null;
 
   function handleDragStart(e, sq) {
@@ -651,7 +649,7 @@ const chessBoard = (() => {
     executeMove(move);
   }
 
-  // ─── ПРЕВРАЩЕНИЕ ──────────────────────────────────────────
+  // ПРЕВРАЩЕНИЕ
   function showPromotionDialog(color, callback) {
     const overlay = document.getElementById('modal-promotion');
     const pieces = overlay.querySelectorAll('.promo-piece-btn');
@@ -666,7 +664,7 @@ const chessBoard = (() => {
     overlay.classList.add('open');
   }
 
-  // ─── СПИСОК ХОДОВ ─────────────────────────────────────────
+  // СПИСОК ХОДОВ
   function renderMoveList() {
     const table = document.getElementById('moves-table-body');
     if (!table) return;
@@ -711,7 +709,7 @@ const chessBoard = (() => {
   }
   function gotoLast() { viewingMove = -1; render(); }
 
-  // ─── CLOCK ────────────────────────────────────────────────
+  // CLOCK
   let tcIncrement = 0;
   // Храним точку отсчёта Date.now() чтобы не зависеть от дрейфа setInterval.
   // whiteTime/blackTime — «зафиксированное» время на момент clockTickAt.
@@ -719,7 +717,7 @@ const chessBoard = (() => {
   let clockTickAt = null; // Date.now() в момент последнего tickClock() / syncClock
 
   // opts.autoStart  — сразу запустить отсчёт (используется при реджойне в
-  //                   уже идущей партии, когда ходы на сервере есть).
+  // уже идущей партии, когда ходы на сервере есть).
   function startClock(wTime, bTime, tc, opts) {
     const parsed = parseTC(tc || '10+0');
     whiteTime = wTime !== undefined ? wTime : parsed[0] * 60;
@@ -762,10 +760,11 @@ const chessBoard = (() => {
     clockTickAt = now; // сброс точки отсчёта для нового хода
 
     if (!clockRunning) {
-      // Таймер стартует только начиная со 2-го полухода (после первого хода белых)
-      // В шахматах белые делают первый ход без затраты времени (по правилам lichess/chess.com)
+      // Часы стартуют после первого ответного хода чёрных (со 2-го полного хода):
+      // оба первых полухода защищены серверным дедлайном, основные часы у
+      // сервера в это время стоят — клиент не должен от них отрываться.
       const totalMoves = state.history ? state.history.length : 0;
-      if (totalMoves >= 1) {
+      if (totalMoves >= 2) {
         clockRunning = true;
         clockInterval = setInterval(clockTick_interval, 100);
       }
@@ -856,7 +855,6 @@ const chessBoard = (() => {
   }
 
   // Форматирование ШАХМАТНЫХ ЧАСОВ (секунды → «m:ss»). Переименовано из
-  // formatTime (2Г): глобальный formatTime из /js/utils.js — про время
   // сообщений (таймстамп → «ЧЧ:ММ»), это — про время партии на часах.
   function formatClock(sec) {
     // Округляем вниз — время дробное (float) после точного отсчёта
@@ -866,15 +864,22 @@ const chessBoard = (() => {
     return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
-  // ─── ЗВУКИ ────────────────────────────────────────────────
+  // ЗВУКИ
   // prevState — позиция ДО применения хода: раньше взятие определялось
   // ПОСЛЕ applyMove, когда board[move.to] уже занят двинувшейся фигурой,
   // поэтому звук «взятия» играл на КАЖДОМ ходу, а тихий ход и рокировка
   // были недостижимы.
+  // Один AudioContext на партию: браузеры жёстко лимитируют их число,
+  // новый контекст на каждый ход приводил к внезапному пропаданию звука.
+  let _soundCtx = null;
   function playSound(move, prevState) {
     const settings = typeof getSettings === 'function' ? getSettings() : { sounds: true };
     if (!settings.sounds) return;
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    try {
+      if (!_soundCtx) _soundCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (_soundCtx.state === 'suspended') _soundCtx.resume().catch(() => {});
+    } catch (e) { return; }
+    const ctx = _soundCtx;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain); gain.connect(ctx.destination);
@@ -892,7 +897,7 @@ const chessBoard = (() => {
     osc.stop(ctx.currentTime + 0.15);
   }
 
-  // ─── GAME RESULT ──────────────────────────────────────────
+  // GAME RESULT
   function showGameResult(title, subtitle, tId) {
     const overlay = document.getElementById('modal-game-result');
     if (!overlay) return;
@@ -940,7 +945,7 @@ const chessBoard = (() => {
     refreshCurrentUser();
   }
 
-  // ─── INIT GAME ─────────────────────────────────────────────
+  // INIT GAME
   function resyncFromServer(data) {
     if (gameMode !== 'online') return;
     const wasViewingLive = viewingMove === -1;
@@ -1126,7 +1131,7 @@ const chessBoard = (() => {
     if (botEl) botEl.innerHTML = renderCap(playerColor === 'w' ? st.capturedWhite : st.capturedBlack);
   }
 
-  // ─── ANALYSIS MODE ─────────────────────────────────────────
+  // ANALYSIS MODE
   function loadAnalysis() {
     state = ChessEngine.parseFEN(ChessEngine.START_FEN);
     historyStates = [ChessEngine.deepClone(state)];
@@ -1186,7 +1191,7 @@ const chessBoard = (() => {
 
   function getFEN() { return ChessEngine.toFEN(state); }
 
-  // ─── KEYBOARD NAVIGATION ──────────────────────────────────
+  // KEYBOARD NAVIGATION
   document.addEventListener('keydown', (e) => {
     const isGamePage = document.getElementById('page-game')?.classList.contains('active')
       || document.getElementById('page-analysis')?.classList.contains('active');
@@ -1197,7 +1202,7 @@ const chessBoard = (() => {
     else if (e.key === 'ArrowDown') { gotoLast(); e.preventDefault(); }
   });
 
-  // ─── PUBLIC API ────────────────────────────────────────────
+  // PUBLIC API
   return {
     render,
     handleClick,

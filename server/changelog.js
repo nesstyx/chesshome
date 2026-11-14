@@ -1,17 +1,14 @@
-// ═══════════════════════════════════════════════════════════════
-//  changelog.js — журнал обновлений (/changelog)
-// ═══════════════════════════════════════════════════════════════
-//  • Записи (по месяцам, текст в Markdown) создаёт/правит/удаляет ТОЛЬКО
-//    владелец сайта — аккаунт ChessHome. Другие админы не могут.
-//  • Реакции, просмотры и комментарии — только от аккаунтов (анонимы не
-//    считаются и не могут писать).
-//  • Просмотр = один аккаунт один раз на запись.
-//  • Таблицы создаются сами (CREATE TABLE IF NOT EXISTS).
+// changelog.js — журнал обновлений (/changelog)
+// • Записи (по месяцам, текст в Markdown) создаёт/правит/удаляет ТОЛЬКО
+// владелец сайта — аккаунт ChessHome. Другие админы не могут.
+// • Реакции, просмотры и комментарии — только от аккаунтов (анонимы не
+// считаются и не могут писать).
+// • Просмотр = один аккаунт один раз на запись.
+// • Таблицы создаются сами (CREATE TABLE IF NOT EXISTS).
 //
-//  Подключение: в routes.js, рядом с require('./botmoderator'):
-//      require('./changelog');
-//  (должно быть ДО универсального app.get('*'), иначе /changelog не сработает)
-// ═══════════════════════════════════════════════════════════════
+// Подключение: в routes.js, рядом с require('./botmoderator'):
+// require('./changelog');
+// (должно быть ДО универсального app.get('*'), иначе /changelog не сработает)
 
 'use strict';
 
@@ -40,7 +37,7 @@ const limiterWrite = new RateLimiter(60_000, 40);
 const writeLimit = rateLimit(limiterWrite);
 
 
-// ── Схема БД ──────────────────────────────────────────────────
+// Схема БД
 const SCHEMA_SQL = [
   `CREATE TABLE IF NOT EXISTS changelog_entries (
      id           TEXT PRIMARY KEY,
@@ -93,7 +90,7 @@ function ensureSchema() {
 ensureSchema().catch(e => console.error('[Changelog] schema:', e.message));
 
 
-// ── Хелперы ───────────────────────────────────────────────────
+// Хелперы
 // async-хендлеры Express 4 сами ошибки не ловят — оборачиваем.
 const wrap = (fn) => (req, res) => {
   Promise.resolve(fn(req, res)).catch(e => {
@@ -184,11 +181,11 @@ function mapEntry(row, reacts, mine) {
 }
 
 
-// ── Страница ──────────────────────────────────────────────────
+// Страница
 app.get('/changelog', (req, res) => res.sendFile(path.join(__dirname, '../public/changelog.html')));
 
 
-// ── Список записей ────────────────────────────────────────────
+// Список записей
 // Текст отдаём только у самой свежей записи (она открыта сразу);
 // остальные месяцы подгружаются при раскрытии — страница остаётся лёгкой.
 app.get('/api/changelog', wrap(async (req, res) => {
@@ -213,7 +210,7 @@ app.get('/api/changelog', wrap(async (req, res) => {
 }));
 
 
-// ── Одна запись (с текстом) ───────────────────────────────────
+// Одна запись (с текстом)
 app.get('/api/changelog/:id', wrap(async (req, res) => {
   if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: 'Запись не найдена' });
   await ensureSchema();
@@ -232,7 +229,7 @@ app.get('/api/changelog/:id', wrap(async (req, res) => {
 }));
 
 
-// ── Создание / правка / удаление (только владелец) ────────────
+// Создание / правка / удаление (только владелец)
 app.post('/api/changelog', authMiddleware, writeLimit, wrap(async (req, res) => {
   const owner = await requireOwner(req, res); if (!owner) return;
   const v = validateEntryBody(req.body);
@@ -279,7 +276,7 @@ app.delete('/api/changelog/:id',      authMiddleware, writeLimit, wrap(handleDel
 app.post('/api/changelog/:id/delete', authMiddleware, writeLimit, wrap(handleDelete));
 
 
-// ── Просмотры (только аккаунты, один раз на запись) ───────────
+// Просмотры (только аккаунты, один раз на запись)
 app.post('/api/changelog/:id/view', authMiddleware, wrap(async (req, res) => {
   if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: 'Запись не найдена' });
   await ensureSchema();
@@ -295,7 +292,7 @@ app.post('/api/changelog/:id/view', authMiddleware, wrap(async (req, res) => {
 }));
 
 
-// ── Реакции (только аккаунты; повторный клик снимает, другой эмодзи заменяет) ──
+// Реакции (только аккаунты; повторный клик снимает, другой эмодзи заменяет)
 app.post('/api/changelog/:id/reactions', authMiddleware, writeLimit, wrap(async (req, res) => {
   const { emoji } = req.body || {};
   if (!ALLOWED_EMOJIS.includes(emoji)) return res.status(400).json({ error: 'Недопустимый эмодзи' });
@@ -321,7 +318,7 @@ app.post('/api/changelog/:id/reactions', authMiddleware, writeLimit, wrap(async 
 }));
 
 
-// ── Комментарии ───────────────────────────────────────────────
+// Комментарии
 app.get('/api/changelog/:id/comments', wrap(async (req, res) => {
   if (!UUID_RE.test(req.params.id)) return res.status(404).json({ error: 'Запись не найдена' });
   await ensureSchema();

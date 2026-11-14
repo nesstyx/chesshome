@@ -2,6 +2,13 @@
 <html lang="en">
 <head>
 <script src="/js/utils.js"></script>
+<script>
+  // Безопасная вставка строки в onclick-литерал (JS + HTML-атрибут)
+  function jsStr(s) {
+    return escapeHtml(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+  }
+</script>
+
 <script src="/js/api.js"></script>
 <script src="/js/toast.js"></script>
   <meta charset="UTF-8">
@@ -915,9 +922,9 @@ function renderClubDetail(club) {
         </div>
       </div>
       <div class="member-actions">
-        ${canPromote ? `<button class="btn btn-ghost btn-sm" title="${CH_I18N.t('clubs.tooltip_promote')}" onclick="promoteUser('${club.id}','${username}')">⬆️</button>` : ''}
-        ${canDemote  ? `<button class="btn btn-ghost btn-sm" title="${CH_I18N.t('clubs.tooltip_demote')}" onclick="demoteUser('${club.id}','${username}')">⬇️</button>` : ''}
-        ${canKick    ? `<button class="btn btn-danger btn-sm" title="${CH_I18N.t('clubs.tooltip_kick')}" onclick="kickUser('${club.id}','${username}')">✕</button>` : ''}
+        ${canPromote ? `<button class="btn btn-ghost btn-sm" title="${CH_I18N.t('clubs.tooltip_promote')}" onclick="promoteUser('${club.id}','${jsStr(username)}')">⬆️</button>` : ''}
+        ${canDemote  ? `<button class="btn btn-ghost btn-sm" title="${CH_I18N.t('clubs.tooltip_demote')}" onclick="demoteUser('${club.id}','${jsStr(username)}')">⬇️</button>` : ''}
+        ${canKick    ? `<button class="btn btn-danger btn-sm" title="${CH_I18N.t('clubs.tooltip_kick')}" onclick="kickUser('${club.id}','${jsStr(username)}')">✕</button>` : ''}
       </div>
     </div>`;
   }).join('');

@@ -1,8 +1,5 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/auth.js — регистрация, вход, аккаунт
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного routes.js в рамках рефакторинга.
-//  Код маршрутов не изменён — только обёртка-регистратор.
+// routes/auth.js — регистрация, вход, аккаунт
+const crypto = require('crypto');
 
 const {
   bcrypt,
@@ -40,14 +37,16 @@ const {
   findSocketByUsername,
 } = require('../core');
 
-const twins = require('../twins');   // оценка «один человек» по сигналам устройства/сети
+const moderation = require('../moderation');
+const twins = require('../twins');
+
+// Короткая метка хеша пароля внутри JWT: после смены пароля все токены,
+// выпущенные со старым паролем, невалидны (см. authMiddleware и sockets/auth.js).
+const pwdTag = (hash) => crypto.createHash('sha256').update(String(hash || '')).digest('hex').slice(0, 12);
 
 module.exports = function register(app) {
-// ══════════════════════════════════════════════════════════════
 
-// ══════════════════════════════════════════════════════════════
-//  AUTH & USER API
-// ══════════════════════════════════════════════════════════════
+// AUTH & USER API
 
 app.post('/api/register', 
   rateLimit(limiterRegStrict, 'Слишком много регистраций с вашего IP. Попробуйте позже.'), // 1. Проверяем лимиты по IP
@@ -74,6 +73,9 @@ app.post('/api/register',
     if (username.length < 3)              return res.status(400).json({ error: 'Ник минимум 3 символа' });
     if (username.length > 20)             return res.status(400).json({ error: 'Ник максимум 20 символов' });
     if (password.length < 6)             return res.status(400).json({ error: 'Пароль минимум 6 символов' });
+    // bcrypt учитывает максимум 72 байта: длиннее — молча обрезается,
+    // а гигантское тело рейт-лимит не спасёт (лимит запроса 2 МБ).
+    if (Buffer.byteLength(password, 'utf8') > 72) return res.status(400).json({ error: 'Пароль слишком длинный (максимум 72 байта)' });
     if (!/^[a-zA-Z0-9_-]+$/.test(username)) return res.status(400).json({ error: 'Только буквы, цифры, _ и -' });
     if (RESERVED.includes(username.toLowerCase())) return res.status(400).json({ error: 'Ник зарезервирован' });
     if (nickHasBadWord(username)) return res.status(400).json({ error: 'Ник содержит запрещённые слова' });
@@ -121,7 +123,7 @@ app.post('/api/register',
       await saveUser(userData);
       twins.recordLogin(userData.username, ip, deviceId);   // не блокирует, ошибки глотает
 
-      const token = jwt.sign({ userId: userData.id, username: userData.username }, JWT_SECRET, { expiresIn: '7d' });
+      const token = jwt.sign({ userId: userData.id, username: userData.username, ph: pwdTag(userData.passwordHash) }, JWT_SECRET, { expiresIn: '7d' });
       // Токен больше не возвращается в теле ответа — только в HttpOnly cookie,
       // недоступной для чтения из JS (защита от кражи токена через XSS).
       res.cookie('ch_token', token, AUTH_COOKIE_OPTS);
@@ -142,6 +144,8 @@ app.post('/api/login',
     const { username, password } = req.body;
     const usernameLow = (username || '').toLowerCase().trim();
     if (!usernameLow || typeof password !== 'string') return res.status(400).json({ error: 'Укажите имя и пароль' });
+    // Гигантский пароль = тяжёлый bcrypt-хеш на каждый запрос — отсекаем до сравнения.
+    if (Buffer.byteLength(password, 'utf8') > 1024) return res.status(401).json({ error: 'Неверное имя или пароль' });
 
     const loginIP = getIP(req);
     const streak = getLoginFailStreak(usernameLow, loginIP);
@@ -167,7 +171,7 @@ app.post('/api/login',
     clearLoginFailStreak(usernameLow, loginIP);
     twins.recordLogin(user.username, loginIP, req.deviceId);
 
-    const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: user.id, username: user.username, ph: pwdTag(user.passwordHash) }, JWT_SECRET, { expiresIn: '7d' });
     res.cookie('ch_token', token, AUTH_COOKIE_OPTS);
     res.json({ user: sanitizeUser(user, true) });
   } catch (err) {
@@ -198,7 +202,7 @@ app.get('/api/me', authMiddleware, async (req, res) => {
 });
 
 
-// ── Смена пароля ─────────────────────────────────────────────
+// Смена пароля
 // Нужен текущий пароль. Неверные попытки считаются тем же счётчиком, что и
 // при входе (после 5 неудач подряд — временная блокировка).
 app.post('/api/account/password', authMiddleware, rateLimit(limiterAuth, 'Слишком много попыток. Подождите минуту.'), async (req, res) => {
@@ -229,8 +233,9 @@ app.post('/api/account/password', authMiddleware, rateLimit(limiterAuth, 'Сли
     user.passwordHash = await bcrypt.hash(newPassword, 10);
     await saveUser(user);
 
-    // Обновляем cookie текущей сессии (новый срок 7 дней)
-    const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+    // Обновляем cookie текущей сессии (новый срок 7 дней, новая pwd-метка —
+    // все прежние токены от старого пароля больше не принимаются)
+    const token = jwt.sign({ userId: user.id, username: user.username, ph: pwdTag(user.passwordHash) }, JWT_SECRET, { expiresIn: '7d' });
     res.cookie('ch_token', token, AUTH_COOKIE_OPTS);
     console.log(`[Account] ${user.username} сменил пароль`);
     res.json({ ok: true });
@@ -241,7 +246,7 @@ app.post('/api/account/password', authMiddleware, rateLimit(limiterAuth, 'Сли
 });
 
 
-// ── Удаление аккаунта ────────────────────────────────────────
+// Удаление аккаунта
 app.post('/api/account/delete', authMiddleware, rateLimit(limiterAuth, 'Слишком много попыток.'), async (req, res) => {
   const { password } = req.body;
   if (typeof password !== 'string' || !password) {
@@ -272,10 +277,12 @@ app.post('/api/account/delete', authMiddleware, rateLimit(limiterAuth, 'Слиш
       };
       await client.query('DELETE FROM users WHERE id = $1', [user.id]);
       if (await tableExists('dm_messages')) {
-        await client.query('DELETE FROM dm_messages WHERE from_user = $1 OR to_user = $1', [user.username]);
+        // Регистр в БД не нормализован (from_user хранит ник как есть) —
+        // сравниваем в нижнем регистре, чтобы переписки удалялись целиком.
+        await client.query('DELETE FROM dm_messages WHERE LOWER(from_user) = $1 OR LOWER(to_user) = $1', [user.username.toLowerCase()]);
       }
       if (await tableExists('dm_blocks')) {
-        await client.query('DELETE FROM dm_blocks WHERE blocker = $1 OR blocked = $1', [user.username]);
+        await client.query('DELETE FROM dm_blocks WHERE LOWER(blocker) = $1 OR LOWER(blocked) = $1', [user.username.toLowerCase()]);
       }
       if (await tableExists('follows')) {
         await client.query('DELETE FROM follows WHERE follower = $1 OR following = $1', [user.username]);
@@ -298,6 +305,8 @@ app.post('/api/account/delete', authMiddleware, rateLimit(limiterAuth, 'Слиш
 
     // Чат-история — вне транзакции (функции core, у них свои запросы)
     await removeUserChatMessages(user.username).catch(() => {});
+    // Вычищаем удалённый аккаунт из клубов, турниров и их чатов
+    await moderation.applyBanCascade(user.username).catch(() => {});
     usersCache.delete(user.username.toLowerCase());
 
     const sock = findSocketByUsername(user.username);

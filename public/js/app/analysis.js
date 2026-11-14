@@ -1,9 +1,7 @@
-// ═══════════════════════════════════════════════════════════
-//  app/analysis.js — анализ партий: переходы на страницу /analysis
-// ═══════════════════════════════════════════════════════════
-//  Сам анализ (доска, движок, FEN/PGN) вынесен в отдельную страницу
-//  /analysis (public/analysis.html + public/js/analysis-page.js).
-//  В SPA осталось только то, что нужно другим разделам.
+// app/analysis.js — анализ партий: переходы на страницу /analysis
+// Сам анализ (доска, движок, FEN/PGN) вынесен в отдельную страницу
+// /analysis (public/analysis.html + public/js/analysis-page.js).
+// В SPA осталось только то, что нужно другим разделам.
 
 // Читается в app/core.js (showPage); оставлена для совместимости.
 let _loadingGameIntoAnalysis = false;
@@ -34,7 +32,7 @@ function analyzeCurrentGame() {
   window.location.href = '/analysis';
 }
 
-// ─── ПРОЧЕЕ ───────────────────────────────────────────────────
+// ПРОЧЕЕ
 
 function setBoardTheme(light, dark) {
   document.documentElement.style.setProperty('--board-light', light);

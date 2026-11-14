@@ -691,11 +691,9 @@ function findAnswer(userText) {
   
   for (const intent of INTENTS) {
     if (intent.keywords.some(kw => norm.includes(kw))) {
-      
-      return { 
-        text: intent.answers[0],
-        
-      };
+      // Вариативность ответов + кнопка быстрого перехода, если она задана
+      const ans = intent.answers[Math.floor(Math.random() * intent.answers.length)];
+      return { text: ans, action: intent.action || null };
     }
   }
   

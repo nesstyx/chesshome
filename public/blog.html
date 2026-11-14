@@ -627,6 +627,15 @@ let currentSort = 'recent'; // 'recent' | 'popular' — только для оп
 // X-Device-Id заголовки удалены (2А): сервер берёт device id из
 // HttpOnly-cookie ch_device_id (req.deviceId) и заголовок не читает.
 // formatDate() — глобальная, из /js/utils.js (2Г, унификация)
+// Внешние ссылки из markdown — только в новой вкладке и без window.opener
+if (window.DOMPurify) {
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.tagName === 'A' && node.getAttribute('href') && /^https?:/i.test(node.getAttribute('href'))) {
+      node.setAttribute('target', '_blank');
+      node.setAttribute('rel', 'noopener noreferrer nofollow');
+    }
+  });
+}
 function mdRender(text) {
   if (!text) return '';
   return DOMPurify.sanitize(marked.parse(text, {breaks:true,gfm:true}), {USE_PROFILES:{html:true}});

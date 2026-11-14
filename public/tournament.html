@@ -2,6 +2,13 @@
 <html lang="ru">
 <head>
 <script src="/js/utils.js"></script>
+<script>
+  // Безопасная вставка строки в onclick-литерал (JS + HTML-атрибут)
+  function jsStr(s) {
+    return escapeHtml(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+  }
+</script>
+
 <script src="/js/toast.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -1281,7 +1288,7 @@ function buildLeaderboard() {
             : `<span class="lb-status idle">—</span>`;
 
     const adminBanBtn = isAdmin && p.username !== me
-      ? `<button onclick="adminBanFromTournament('${escapeHtml(p.username)}')" class="btn btn-danger" style="font-size:10px;padding:2px 7px;margin-left:6px;border-radius:6px" title="${CH_I18N.t('tournaments.detail.leaderboard.ban_btn_title')}">🚫</button>`
+      ? `<button onclick="adminBanFromTournament('${jsStr(p.username)}')" class="btn btn-danger" style="font-size:10px;padding:2px 7px;margin-left:6px;border-radius:6px" title="${CH_I18N.t('tournaments.detail.leaderboard.ban_btn_title')}">🚫</button>`
       : '';
 
     return `
@@ -1400,8 +1407,8 @@ function buildChatMessagesHtml() {
     const time = new Date(m.timestamp).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
     const modActions = chatCanModerate
       ? `<span class="t-chat-mod-actions">
-           <button class="t-chat-mod-btn" title="${CH_I18N.t('tournaments.detail.chat.mute_btn_title')}" onclick="promptMuteTournamentUser('${escapeHtml(m.username)}')">🔇 ${CH_I18N.t('tournaments.detail.chat.mute_btn')}</button>
-           ${m.muted ? `<button class="t-chat-mod-btn" title="${CH_I18N.t('tournaments.detail.chat.unmute_btn_title')}" onclick="unmuteTournamentUser('${escapeHtml(m.username)}')">🔓 ${CH_I18N.t('tournaments.detail.chat.unmute_btn')}</button>` : ''}
+           <button class="t-chat-mod-btn" title="${CH_I18N.t('tournaments.detail.chat.mute_btn_title')}" onclick="promptMuteTournamentUser('${jsStr(m.username)}')">🔇 ${CH_I18N.t('tournaments.detail.chat.mute_btn')}</button>
+           ${m.muted ? `<button class="t-chat-mod-btn" title="${CH_I18N.t('tournaments.detail.chat.unmute_btn_title')}" onclick="unmuteTournamentUser('${jsStr(m.username)}')">🔓 ${CH_I18N.t('tournaments.detail.chat.unmute_btn')}</button>` : ''}
          </span>`
       : '';
     return `
@@ -1694,7 +1701,7 @@ function renderEditBlacklist() {
   el.innerHTML = editBlacklist.map(n => `
     <span class="bl-tag">
       ${escapeHtml(n)}
-      <span class="bl-tag-remove" onclick="removeEditBlacklist('${escapeHtml(n)}')">✕</span>
+      <span class="bl-tag-remove" onclick="removeEditBlacklist('${jsStr(n)}')">✕</span>
     </span>`).join('');
 }
 

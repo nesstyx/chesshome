@@ -6,6 +6,7 @@ import (
         "math"
         "net/http"
         "os"
+        "time"
 
         "chesshome-go/ratingsystem"
 )
@@ -40,6 +41,9 @@ func ratingHandler(w http.ResponseWriter, r *http.Request) {
                 return
         }
 
+        // Тело запроса — несколько сотен байт JSON; лимит отсекает
+        // мусорные/гигантские payloads до декодирования.
+        r.Body = http.MaxBytesReader(w, r.Body, 4096)
         var req ratingRequest
         if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
                 http.Error(w, "bad json", http.StatusBadRequest)
@@ -96,5 +100,13 @@ func main() {
         }
 
         log.Printf("Go-сервис слушает 127.0.0.1:%s\n", port)
-        log.Fatal(http.ListenAndServe("127.0.0.1:"+port, mux))
+        srv := &http.Server{
+                Addr:              "127.0.0.1:" + port,
+                Handler:           mux,
+                ReadHeaderTimeout: 2 * time.Second,
+                ReadTimeout:       3 * time.Second,
+                WriteTimeout:      3 * time.Second,
+                IdleTimeout:       30 * time.Second,
+        }
+        log.Fatal(srv.ListenAndServe())
 }

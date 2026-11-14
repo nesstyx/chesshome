@@ -1,4 +1,3 @@
-// ═══════════════════════════════════════════════════════════════
 
 const {
   app, db, uuidv4,
@@ -7,7 +6,7 @@ const {
   SYSTEM_SENDER, isSystemSender,
 } = require('./core');
 
-// ── Шаблоны: key → { label (для админа), ru, en (причина в тексте) } ──
+// Шаблоны: key → { label (для админа), ru, en (причина в тексте) }
 const TEMPLATES = {
   spam:     { label: 'Реклама / спам',                     ru: 'реклама или спам',                                              en: 'advertising or spam' },
   flood:    { label: 'Флуд / одинаковые сообщения',        ru: 'флуд и многократное повторение одинаковых сообщений',           en: 'flooding and repeating the same message' },
@@ -79,7 +78,7 @@ async function sendWarning({ username, template, text, by, source = 'admin', sco
 }
 
 
-// ── Админ-API ──
+// Админ-API
 app.get('/api/admin/warning-templates', authMiddleware, async (req, res) => {
   await requireAdmin(req, res, async () => {
     res.json(Object.entries(TEMPLATES).map(([key, t]) => ({ key, label: t.label, text: buildText(key) })));

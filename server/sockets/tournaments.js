@@ -1,9 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  sockets/tournaments.js — сокет-события турниров (комнаты, очередь, берсерк)
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного sockets.js в рамках рефакторинга.
-//  Код обработчиков не изменён.
-
+// sockets/tournaments.js — сокет-события турниров (комнаты, очередь, берсерк)
 const {
   usersCache,
   tournaments,
@@ -102,7 +97,8 @@ module.exports = function registerTournaments(socket) {
     } else {
       game.blackTime = Math.floor((game.blackTime || 0) / 2);
     }
-    game.tcIncrement = 0;
+    // Инкремент снимаем ТОЛЬКО у взявшего берсерк: общий game.tcIncrement = 0
+    // лишал добавленных секунд и соперника, который берсерк не брал.
     game.lastMoveAt = game.lastMoveAt || Date.now();
     const payload = { gameId, color, berserk: game.berserk, whiteTime: game.whiteTime, blackTime: game.blackTime };
     [findSocketByUsername(game.white), findSocketByUsername(game.black)].forEach(s => s?.emit('berserk_activated', payload));

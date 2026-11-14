@@ -1,8 +1,4 @@
-// ═══════════════════════════════════════════════════════════════
-//  routes/forum.js — форум
-// ═══════════════════════════════════════════════════════════════
-//  Вынесено из монолитного routes.js в рамках рефакторинга.
-//  Код маршрутов не изменён — только обёртка-регистратор.
+// routes/forum.js — форум
 
 const {
   jwt,
@@ -24,11 +20,15 @@ const {
   authMiddleware,
 } = require('../core');
 
+const moderation = require('../moderation');
+
 module.exports = function register(app) {
-app.get('/api/forum/threads', (req, res) => {
+app.get('/api/forum/threads', async (req, res) => {
   const page  = Math.max(0, parseInt(req.query.page) || 0);
   const limit = Math.min(50, parseInt(req.query.limit) || 20);
-  const sorted = [...forumThreads].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+  // Темы авторов в теневом бане остальным не показываются
+  const visible = await moderation.filterVisible(req, forumThreads, t => t.author);
+  const sorted = [...visible].sort((a, b) => b.lastActivityAt - a.lastActivityAt);
   res.json({ threads: sorted.slice(page * limit, page * limit + limit), total: sorted.length, page, limit });
 });
 
@@ -42,6 +42,8 @@ app.get('/api/forum/threads/:slug', async (req, res) => {
   const end = start + replyLimit;
 
   let allReplies = forumReplies.filter(r => r.threadId === thread.id).sort((a, b) => a.createdAt - b.createdAt);
+  // Ответы авторов в теневом бане скрываются, как в публичном чате
+  allReplies = await moderation.filterVisible(req, allReplies, r => r.author);
   const totalReplies = allReplies.length;
   const replies = allReplies.slice(start, end);
 
@@ -78,7 +80,6 @@ app.get('/api/forum/threads/:slug', async (req, res) => {
     try { const p = jwt.verify(authTok945, JWT_SECRET); viewerKey = 'u:' + p.username.toLowerCase(); }
     catch { viewerKey = 'ip:' + getIP(req); }
   } else { viewerKey = 'ip:' + getIP(req); }
-  // Утечка памяти (P1): учёт просмотрщиков вынесен в trackForumView (core.js),
   // где размер forumViewSessions ограничен (лимит тем и лимит Set на тему).
   if (trackForumView(thread.id, viewerKey)) {
     thread.views++; saveForumThread(thread).catch(() => {});
@@ -150,6 +151,7 @@ app.post('/api/forum/threads/:id/replies', authMiddleware, rateLimit(limiterStri
   if (body.trim().length > 5000)        return res.status(400).json({ error: 'Ответ слишком длинный (макс. 5 000 символов)' });
   if (countTodayByUser(forumReplies, user.username) >= 10)
     return res.status(429).json({ error: 'Вы уже написали 10 ответов сегодня. Лимит сбросится в полночь.' });
+  moderation.record({ username: user.username, channel: 'forum', text: body.trim() });
   const now = Date.now();
   const reply = { id: uuidv4(), threadId: thread.id, author: user.username, authorId: user.id, body: body.trim(), createdAt: now };
   forumReplies.push(reply);
@@ -237,15 +239,16 @@ app.post('/api/forum/threads', authMiddleware, rateLimit(limiterStrict), async (
     views: 0
   };
 
+  moderation.record({ username: user.username, channel: 'forum', text: (title.trim() + '\n' + body.trim()).slice(0, 1000) });
   forumThreads.unshift(thread);
   await saveForumThread(thread);
   res.json({ ok: true, thread: { id: thread.id, slug: thread.slug, title: thread.title } });
 });
 
 
-// ── FOLLOWS (подписки) API ───────────────────────────────────
+// FOLLOWS (подписки) API
 
-// ── Forum API ─────────────────────────────────────────────────
+// Forum API
 function countTodayByUser(arr, username) {
   const midnight = new Date(); midnight.setHours(0,0,0,0);
   return arr.filter(x => x.author === username && x.createdAt >= midnight.getTime()).length;
