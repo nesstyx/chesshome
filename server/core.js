@@ -90,6 +90,9 @@ const {
   recordGame,
   updateStats,
   startGame,
+  rematchPool,
+  REMATCH_OFFER_TTL,
+  isUserInGame,
   serverChess,
 } = gameService;
 
@@ -1149,6 +1152,9 @@ Object.assign(module.exports, {
   finishTournamentGame,
   anticheatBan,
   startGame,
+  rematchPool,
+  REMATCH_OFFER_TTL,
+  isUserInGame,
   serverChess,
   limiterSocketConnect,
   main,
