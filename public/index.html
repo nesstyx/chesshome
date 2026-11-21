@@ -11,7 +11,7 @@
   <meta name="description" content="Chess Home — современная шахматная платформа с анализом, редактором и онлайн-игрой">
   <link rel="stylesheet" href="/css/main.css">
 <link rel="icon" type="image/png" href="/img/logo/favicon.png">
-<script src="/js/i18n.js"></script>
+<script src="/js/i18n.js?v=20261121-1"></script>
 <!-- Yandex.Metrika counter -->
 <script type="text/javascript">
     (function(m,e,t,r,i,k,a){
@@ -1645,6 +1645,201 @@
       #ch3d-bg .ch3d-fl > span { animation: none; }
     }
   </style>
+
+<style id="ch-home-v2">
+/* ══════════════════════════════════════════════════════════
+   ГЛАВНАЯ v2 — тёмное золото, стеклянные панели, живое движение
+   Всё привязано к #page-home, остальные страницы не затронуты
+══════════════════════════════════════════════════════════ */
+
+/* свечение за заголовком — медленно «дышит» */
+#page-home .hero { position: relative; }
+#page-home .hero::before {
+  content: ''; position: absolute; z-index: -1; pointer-events: none;
+  left: -12%; top: -25%; width: 62%; height: 130%;
+  background: radial-gradient(closest-side, rgba(201,168,76,.16), transparent 72%);
+  animation: chAurora 10s ease-in-out infinite alternate;
+}
+@keyframes chAurora { to { transform: translate(7%, 6%) scale(1.1); opacity: .7; } }
+
+/* единственная «оркестровая» анимация при открытии: текст героя выезжает по очереди */
+#page-home .hero-text > * { animation: chRise .85s cubic-bezier(.22,1,.36,1) both; }
+#page-home .hero-text > :nth-child(1) { animation-delay: .05s; }
+#page-home .hero-text > :nth-child(2) { animation-delay: .15s; }
+#page-home .hero-text > :nth-child(3) { animation-delay: .27s; }
+#page-home .hero-text > :nth-child(4) { animation-delay: .38s; }
+#page-home .hero-text > :nth-child(5) { animation-delay: .5s; }
+@keyframes chRise { from { opacity: 0; transform: translateY(26px); } to { opacity: 1; transform: none; } }
+
+/* золотой блик пробегает по слову «Побеждай.» */
+#page-home .hero-title .accent {
+  background: linear-gradient(100deg, #a07830 0%, #c9a84c 30%, #f6e3a1 50%, #c9a84c 70%, #a07830 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  animation: chSheen 5.5s linear infinite;
+}
+@keyframes chSheen { to { background-position: -250% 0; } }
+
+/* чипы под подзаголовком */
+.hero-chips { display: flex; flex-wrap: wrap; gap: 10px; margin: -12px 0 30px; max-width: 520px; }
+.hero-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 14px 7px 10px; border-radius: 999px;
+  font-size: 13px; font-weight: 700; color: var(--text-primary);
+  background: rgba(30,32,40,.55);
+  border: 1px solid rgba(201,168,76,.22);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  transition: transform .25s, border-color .25s, background .25s;
+}
+.hero-chip svg { width: 18px; height: 18px; color: var(--accent); flex-shrink: 0; }
+.hero-chip:hover { transform: translateY(-2px); border-color: var(--accent); background: rgba(201,168,76,.12); }
+
+/* кнопки: золотой блик при наведении */
+#page-home .hero-actions .btn { position: relative; overflow: hidden; }
+#page-home .hero-actions .btn-primary::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: -60%; width: 40%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.55), transparent);
+  transform: skewX(-20deg); transition: left .7s ease;
+}
+#page-home .hero-actions .btn-primary:hover::after { left: 130%; }
+#page-home .hero-actions .btn-secondary { background: rgba(30,32,40,.55); backdrop-filter: blur(8px); border-color: rgba(201,168,76,.3); }
+#page-home .hero-actions .btn-secondary:hover { border-color: var(--accent); }
+
+/* ── ПОЛОСА БЫСТРЫХ ССЫЛОК ─────────────────────────────── */
+.ch-strip-wrap { width: 100%; max-width: 1200px; margin: 0 auto 56px; padding: 0 24px; }
+.ch-strip {
+  display: flex; align-items: stretch;
+  background: linear-gradient(180deg, rgba(30,32,40,.75), rgba(22,24,32,.75));
+  border: 1px solid rgba(201,168,76,.18);
+  border-radius: 18px;
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  box-shadow: 0 10px 40px rgba(0,0,0,.35);
+  overflow-x: auto; scrollbar-width: none;
+}
+.ch-strip::-webkit-scrollbar { display: none; }
+.ch-strip-item {
+  flex: 1 0 auto; display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 20px 26px; position: relative; cursor: pointer;
+  background: none; border: none; color: var(--text-primary);
+  font: 700 14px var(--font-body); white-space: nowrap;
+  transition: color .25s, background .25s;
+}
+.ch-strip-item + .ch-strip-item::before {
+  content: ''; position: absolute; left: 0; top: 24%; bottom: 24%; width: 1px;
+  background: linear-gradient(transparent, var(--border-light), transparent);
+}
+.ch-strip-item svg { color: var(--accent); transition: transform .3s cubic-bezier(.34,1.56,.64,1), filter .3s; }
+.ch-strip-item::after {
+  content: ''; position: absolute; left: 22%; right: 22%; bottom: 0; height: 2px;
+  background: var(--accent); border-radius: 2px;
+  transform: scaleX(0); transition: transform .3s ease;
+}
+.ch-strip-item:hover { background: rgba(201,168,76,.07); }
+.ch-strip-item:hover svg { transform: translateY(-3px) scale(1.15); filter: drop-shadow(0 4px 8px rgba(201,168,76,.6)); }
+.ch-strip-item:hover::after { transform: scaleX(1); }
+.ch-strip-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; border-radius: 14px; }
+
+/* ── БЛОК «РАЗБОР ПАРТИЙ» ──────────────────────────────── */
+.ch-report-wrap { width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 24px 40px; }
+.ch-report {
+  position: relative; overflow: hidden;
+  display: grid; grid-template-columns: 1.05fr 1fr; gap: 48px; align-items: center;
+  padding: 52px 56px;
+  background:
+    radial-gradient(ellipse 60% 80% at 100% 0%, rgba(201,168,76,.12), transparent 65%),
+    linear-gradient(180deg, rgba(30,32,40,.8), rgba(22,24,32,.85));
+  border: 1px solid rgba(201,168,76,.2);
+  border-radius: 28px;
+  box-shadow: 0 20px 70px rgba(0,0,0,.45);
+}
+.ch-report-kicker { color: var(--accent); font-weight: 800; font-size: 15px; margin-bottom: 14px; }
+.ch-report h2 {
+  font-family: var(--font-display); font-size: clamp(26px, 3.2vw, 40px);
+  line-height: 1.15; margin-bottom: 18px;
+}
+.ch-report-text > p { color: var(--text-secondary); line-height: 1.7; font-size: 16px; max-width: 460px; margin-bottom: 24px; }
+.ch-checks { list-style: none; display: grid; gap: 12px; margin-bottom: 30px; }
+.ch-checks li { display: flex; align-items: center; gap: 12px; font-size: 15px; font-weight: 600; }
+.ch-checks li::before {
+  content: ''; width: 22px; height: 22px; flex-shrink: 0; border-radius: 50%;
+  background: rgba(201,168,76,.15) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c9a84c' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E") center/13px no-repeat;
+}
+
+/* карточка-отчёт */
+.ch-report-card {
+  position: relative; overflow: hidden;
+  padding: 26px 28px 28px;
+  background: linear-gradient(160deg, #20222c, #15171e);
+  border: 1px solid var(--border-light);
+  border-radius: 20px;
+  box-shadow: 0 30px 60px rgba(0,0,0,.55), 0 0 0 1px rgba(201,168,76,.08), 0 0 60px rgba(201,168,76,.08);
+}
+.ch-rc-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.ch-rc-top small { color: var(--text-muted); font-size: 12px; }
+.ch-rc-live { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--green); font-weight: 700; }
+.ch-rc-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
+.ch-rc-title { font-size: 20px; font-weight: 800; margin: 6px 0 2px; }
+.ch-rc-sub { color: var(--text-secondary); font-size: 13px; margin-bottom: 14px; }
+
+/* график оценки — линия «рисуется» при появлении */
+.ch-eval { width: 100%; height: 86px; display: block; margin-bottom: 18px; }
+.ch-eval .ln { fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
+  stroke-dasharray: 1; stroke-dashoffset: 1; }
+.ch-eval .fl { fill: url(#chEvalGrad); opacity: 0; }
+.ch-eval .mid { stroke: var(--border-light); stroke-dasharray: 3 5; }
+.ch-eval .dot { fill: #fff; stroke: var(--accent); stroke-width: 2; opacity: 0; }
+.in .ch-eval .ln { animation: chDraw 1.8s .2s cubic-bezier(.4,0,.2,1) forwards; }
+.in .ch-eval .fl { animation: chFade 1s 1.4s forwards; }
+.in .ch-eval .dot { animation: chFade .4s 1.9s forwards; }
+@keyframes chDraw { to { stroke-dashoffset: 0; } }
+@keyframes chFade { to { opacity: 1; } }
+
+.ch-bar-row { margin-top: 15px; }
+.ch-bar-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; font-weight: 700; margin-bottom: 7px; }
+.ch-bar-head b { color: var(--accent-light); font-variant-numeric: tabular-nums; }
+.ch-bar { height: 7px; border-radius: 6px; background: rgba(255,255,255,.07); overflow: hidden; }
+.ch-bar i {
+  display: block; height: 100%; width: 0; border-radius: 6px;
+  background: linear-gradient(90deg, var(--accent-dark), var(--accent), var(--accent-light));
+  transition: width 1.5s cubic-bezier(.22,1,.36,1);
+}
+.in .ch-bar i { width: var(--w); }
+.ch-bar-row:nth-of-type(2) .ch-bar i { transition-delay: .15s; }
+.ch-bar-row:nth-of-type(3) .ch-bar i { transition-delay: .3s; }
+.ch-rc-note { margin-top: 18px; font-size: 12px; color: var(--text-muted); }
+
+/* появление блоков при прокрутке — только у этих двух */
+.ch-reveal { opacity: 0; transform: translateY(34px); transition: opacity .9s ease, transform .9s cubic-bezier(.22,1,.36,1); }
+.ch-reveal.in { opacity: 1; transform: none; }
+
+/* карточки режимов: иконка оживает при наведении */
+.mode-icon { display: inline-block; transition: transform .35s cubic-bezier(.34,1.56,.64,1); }
+.mode-card:hover .mode-icon { transform: translateY(-5px) rotate(-8deg) scale(1.15); }
+.feature-icon { transition: transform .35s cubic-bezier(.34,1.56,.64,1); }
+.feature-card:hover .feature-icon { transform: translateY(-4px) scale(1.12); }
+
+/* ── АДАПТИВ ───────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .ch-report { grid-template-columns: 1fr; padding: 32px 22px; gap: 32px; }
+  .ch-report-text > p { max-width: none; }
+}
+@media (max-width: 768px) {
+  .hero-chips { justify-content: center; margin: 0 auto 24px; }
+  .ch-strip-wrap { padding: 0 12px; margin-bottom: 36px; }
+  .ch-strip-item { padding: 16px 20px; }
+  .ch-report-wrap { padding: 0 12px 28px; }
+}
+
+/* уважаем настройку «уменьшить анимацию» */
+@media (prefers-reduced-motion: reduce) {
+  #page-home *, #page-home *::before, #page-home *::after { animation: none !important; transition: none !important; }
+  .ch-reveal { opacity: 1; transform: none; }
+  .ch-eval .ln { stroke-dashoffset: 0; } .ch-eval .fl, .ch-eval .dot { opacity: 1; }
+  .ch-bar i { width: var(--w); }
+  #page-home .hero-title .accent { background-position: 0 0; }
+}
+</style>
 </head>
 <body>
 
@@ -1776,6 +1971,7 @@
           удобным редактором позиций и онлайн-игрой в реальном времени.
           Только на русском, только для лучших.
         </p>
+        <div class="hero-chips"><span class="hero-chip"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span data-i18n="home.chip_engine">Stockfish в браузере</span></span><span class="hero-chip"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l5 3.5-5 3.5z"/></svg><span data-i18n="home.chip_online">Онлайн-партии</span></span><span class="hero-chip"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h3v3a2 2 0 104 0V3h3a1 1 0 011 1v4h-3a2 2 0 100 4h3v4a1 1 0 01-1 1h-4v-3a2 2 0 10-4 0v3H5a1 1 0 01-1-1v-4h3a2 2 0 100-4H4V4a1 1 0 011-1z"/></svg><span data-i18n="home.chip_puzzles">Задачи</span></span><span class="hero-chip"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4h8v5a4 4 0 01-8 0z"/><path d="M8 6H4v1a3 3 0 003 3M16 6h4v1a3 3 0 01-3 3M12 13v4M8.5 20h7"/></svg><span data-i18n="home.chip_rating">Рейтинг Эло</span></span></div>
         <div class="hero-actions">
           <button class="btn btn-primary btn-lg" onclick="showPage('lobby')" data-i18n="home.hero_cta_play">
             Начать игру!
@@ -1789,6 +1985,51 @@
         <div class="hero-board-wrap" id="hero-board">
           <canvas id="hero-chess-canvas"></canvas>
           <div class="hero-board-glow"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ch-strip-wrap ch-reveal">
+      <div class="ch-strip">
+        <button class="ch-strip-item" onclick="location.href='/analysis'"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span data-i18n="home.strip_analysis">Анализ Stockfish</span></button>
+        <button class="ch-strip-item" onclick="showPage('lobby')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l5 3.5-5 3.5z"/></svg><span data-i18n="home.strip_online">Онлайн-игра</span></button>
+        <button class="ch-strip-item" onclick="location.href='/puzzles'"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h3v3a2 2 0 104 0V3h3a1 1 0 011 1v4h-3a2 2 0 100 4h3v4a1 1 0 01-1 1h-4v-3a2 2 0 10-4 0v3H5a1 1 0 01-1-1v-4h3a2 2 0 100-4H4V4a1 1 0 011-1z"/></svg><span data-i18n="home.strip_puzzles">Задачи</span></button>
+        <button class="ch-strip-item" onclick="showPage('editor')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9a2.8 2.8 0 00-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg><span data-i18n="home.strip_editor">Редактор позиций</span></button>
+        <button class="ch-strip-item" onclick="showPage('lobby')"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4h8v5a4 4 0 01-8 0z"/><path d="M8 6H4v1a3 3 0 003 3M16 6h4v1a3 3 0 01-3 3M12 13v4M8.5 20h7"/></svg><span data-i18n="home.strip_rating">Рейтинг Эло</span></button>
+      </div>
+    </div>
+
+    <div class="ch-report-wrap">
+      <div class="ch-report ch-reveal">
+        <div class="ch-report-text">
+          <div class="ch-report-kicker" data-i18n="home.report_kicker">Разбор партий</div>
+          <h2 data-i18n="home.report_title">Узнай, где теряются очки, и что тренировать</h2>
+          <p data-i18n="home.report_text">Загрузи партию — движок пройдёт по каждому ходу, отметит зевки и покажет лучшие продолжения прямо на доске.</p>
+          <ul class="ch-checks">
+            <li data-i18n="home.report_check1">Оценка каждой позиции от Stockfish</li>
+            <li data-i18n="home.report_check2">Лучший ход и варианты на 20+ ходов</li>
+            <li data-i18n="home.report_check3">Партии сохраняются в PGN</li>
+          </ul>
+          <button class="btn btn-primary btn-lg" onclick="location.href='/analysis'" data-i18n="home.report_cta">Разобрать партию</button>
+        </div>
+        <div class="ch-report-stage">
+          <div class="ch-report-card">
+            <div class="ch-rc-top"><small data-i18n="home.rc_example">Пример отчёта</small><span class="ch-rc-live"><i></i><span data-i18n="home.rc_live">Анализ</span></span></div>
+            <div class="ch-rc-title" data-i18n="home.rc_title">Что мешает выигрывать</div>
+            <div class="ch-rc-sub" data-i18n="home.rc_sub">Доля проигранных партий с ошибкой</div>
+            <svg class="ch-eval" viewBox="0 0 320 86" preserveAspectRatio="none" aria-hidden="true">
+              <defs><linearGradient id="chEvalGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#c9a84c" stop-opacity=".35"/><stop offset="1" stop-color="#c9a84c" stop-opacity="0"/></linearGradient></defs>
+              <line class="mid" x1="0" y1="43" x2="320" y2="43"/>
+              <path class="fl" d="M0 50 C20 46 30 56 50 52 S85 30 105 36 S140 66 165 58 S205 20 232 28 S280 14 320 10 L320 86 L0 86Z"/>
+              <path class="ln" pathLength="1" d="M0 50 C20 46 30 56 50 52 S85 30 105 36 S140 66 165 58 S205 20 232 28 S280 14 320 10"/>
+              <circle class="dot" cx="320" cy="10" r="4"/>
+            </svg>
+            <div class="ch-bar-row"><div class="ch-bar-head"><span data-i18n="home.rc_bar1">Фигуры без защиты</span><b data-count="23">0%</b></div><div class="ch-bar"><i style="--w:23%"></i></div></div>
+            <div class="ch-bar-row"><div class="ch-bar-head"><span data-i18n="home.rc_bar2">Пропущенная тактика</span><b data-count="18">0%</b></div><div class="ch-bar"><i style="--w:18%"></i></div></div>
+            <div class="ch-bar-row"><div class="ch-bar-head"><span data-i18n="home.rc_bar3">Ошибки в эндшпиле</span><b data-count="12">0%</b></div><div class="ch-bar"><i style="--w:12%"></i></div></div>
+            <div class="ch-rc-note" data-i18n="home.rc_note">Цифры в примере условные</div>
+          </div>
         </div>
       </div>
     </div>
@@ -4601,6 +4842,40 @@ function toggleFaq(btn) {
       window.loadAdminAppeals('open');
     } catch (e) { say(e.message, 'error'); }
   };
+})();
+</script>
+
+<script>
+// ══ ГЛАВНАЯ v2: появление блоков и счётчики в примере отчёта ══
+(function () {
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function countUp(root) {
+    root.querySelectorAll('[data-count]').forEach(el => {
+      const to = +el.dataset.count;
+      if (reduce) { el.textContent = to + '%'; return; }
+      const t0 = performance.now(), dur = 1500;
+      (function tick(t) {
+        const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(to * e) + '%';
+        if (p < 1) requestAnimationFrame(tick);
+      })(t0);
+    });
+  }
+
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver(entries => {
+      entries.forEach(e => {
+        if (!e.isIntersecting) return;
+        e.target.classList.add('in');
+        countUp(e.target);
+        io.unobserve(e.target);
+      });
+    }, { threshold: 0.2 });
+    document.querySelectorAll('#page-home .ch-reveal').forEach(el => io.observe(el));
+  } else {
+    document.querySelectorAll('#page-home .ch-reveal').forEach(el => { el.classList.add('in'); countUp(el); });
+  }
 })();
 </script>
 </body>

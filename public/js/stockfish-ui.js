@@ -24,10 +24,14 @@ const StockfishAnalyzer = (() => {
       return true;
     } catch (e) { setStatus('error'); return false; }
   }
+  // Опция настраиваемая, если движок её объявил и диапазон не вырожден (min == max).
+  // Эта сборка Stockfish однопоточная: объявляет Threads max 1, но после
+  // `setoption name Threads` перестаёт отвечать на isready — поэтому такие опции не трогаем.
+  const canSet = n => { const o = opts[n]; return !!o && !(o.min !== null && o.max !== null && o.max <= o.min); };
+  const clampOpt = (n, v) => { const o = opts[n]; return o.min !== null && o.max !== null ? Math.min(o.max, Math.max(o.min, v)) : v; };
   function applyOpts() {
-    const set = (n, v) => opts[n] && sf.postMessage(`setoption name ${n} value ${v}`);
-    set('Threads', cfg.threads); set('Hash', cfg.hash);
-    sf.postMessage(`setoption name MultiPV value ${cfg.multipv}`);
+    const set = (n, v) => canSet(n) && sf.postMessage(`setoption name ${n} value ${clampOpt(n, v)}`);
+    set('Threads', cfg.threads); set('Hash', cfg.hash); set('MultiPV', cfg.multipv);
   }
   function setEnabled(on) {
     cfg.enabled = on; save();
@@ -83,9 +87,12 @@ const StockfishAnalyzer = (() => {
   // разбор вывода UCI
   function handle(line) {
     if (typeof line !== 'string') return;
-    if (line.startsWith('option name ')) { const m = line.match(/^option name (\S+)/); if (m) opts[m[1]] = 1; }
+    if (line.startsWith('option name ')) {
+      const m = line.match(/^option name (.+?) type (\w+)(?: default (\S*))?(?: min (-?\d+))?(?: max (-?\d+))?/);
+      if (m) opts[m[1]] = { min: m[4] !== undefined ? +m[4] : null, max: m[5] !== undefined ? +m[5] : null };
+    }
     else if (line === 'uciok') { applyOpts(); dirty = false; sf.postMessage('isready'); }
-    else if (line === 'readyok') { if (!ready) { ready = true; setStatus('ready'); emit('sf:ready', opts); if (cur) local(); } }
+    else if (line === 'readyok') { if (!ready) { ready = true; setStatus('ready'); emit('sf:ready', Object.fromEntries(Object.keys(opts).map(k => [k, canSet(k) ? 1 : 0]))); if (cur) local(); } }
     else if (line.startsWith('info') && line.includes(' pv ')) info(line);
     else if (line.startsWith('bestmove')) done();
   }
@@ -179,7 +186,7 @@ const StockfishAnalyzer = (() => {
   return {
     init, analyze, stop, setEnabled, set, review, handleRemoteMessage, handleRemoteUnavailable,
     cancelReview: () => { reviewing = false; },
-    cfg: () => ({ ...cfg }), hasOpt: n => !!opts[n], isReady: () => ready,
+    cfg: () => ({ ...cfg }), hasOpt: n => canSet(n), isReady: () => ready,
     get reviewing() { return reviewing; }, pawns,
     snapshot: () => ({ fen: cur && cur.fen, lines: lines.filter(Boolean) })
   };
