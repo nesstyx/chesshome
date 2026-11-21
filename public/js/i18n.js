@@ -22,6 +22,9 @@
   const SUPPORTED = ['ru', 'en', 'de'];
   const STORAGE_KEY = 'ch_lang';
   const FALLBACK_LANG = 'en';
+  // Версия словарей. Меняйте при каждом изменении /locales/*.json:
+  // прокси/CDN (DDoS-Guard) и браузер иногда отдают старый файл, а новый URL их обходит.
+  const DICT_VERSION = '20261121-1';
 
   function detectLang() {
     try {
@@ -103,26 +106,43 @@
     return interpolate(str, Object.assign({ n }, vars || {}));
   }
 
+  // Есть ли перевод для ключа (без предупреждений в консоли)
+  function has(key) { return getNested(dict, key) !== undefined; }
+
+  // Если перевода нет — оставляем текст, который уже написан в HTML,
+  // а не показываем пользователю имя ключа вроде home.chip_engine.
+  const warned = {};
+  function missing(key) {
+    if (!warned[key]) { warned[key] = 1; console.warn('[i18n] нет перевода для ключа:', key, '(' + currentLang + ')'); }
+  }
+
   function applyTranslations(root) {
     root = root || document;
 
     root.querySelectorAll('[data-i18n], [data-i18n-html]').forEach(el => {
       const key = el.getAttribute('data-i18n') || el.getAttribute('data-i18n-html');
+      if (!has(key)) { missing(key); return; }
       const val = t(key);
       if (el.hasAttribute('data-i18n-html')) el.innerHTML = val;
       else el.textContent = val;
     });
 
     root.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
-      el.setAttribute('placeholder', t(el.getAttribute('data-i18n-placeholder')));
+      const k = el.getAttribute('data-i18n-placeholder');
+      if (!has(k)) { missing(k); return; }
+      el.setAttribute('placeholder', t(k));
     });
 
     root.querySelectorAll('[data-i18n-title]').forEach(el => {
-      el.setAttribute('title', t(el.getAttribute('data-i18n-title')));
+      const k = el.getAttribute('data-i18n-title');
+      if (!has(k)) { missing(k); return; }
+      el.setAttribute('title', t(k));
     });
 
     root.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
-      el.setAttribute('aria-label', t(el.getAttribute('data-i18n-aria-label')));
+      const k = el.getAttribute('data-i18n-aria-label');
+      if (!has(k)) { missing(k); return; }
+      el.setAttribute('aria-label', t(k));
     });
 
     if (root === document) {
@@ -131,7 +151,7 @@
   }
 
   async function loadDict(lang) {
-    const res = await fetch('/locales/' + lang + '.json', { cache: 'no-cache' });
+    const res = await fetch('/locales/' + lang + '.json?v=' + DICT_VERSION, { cache: 'no-cache' });
     if (!res.ok) throw new Error('i18n: не удалось загрузить /locales/' + lang + '.json');
     return res.json();
   }
