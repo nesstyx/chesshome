@@ -230,7 +230,6 @@ body {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   grid-template-rows: repeat(8, 1fr);
-  grid-template-rows: repeat(8, 1fr);
 }
 
 /* ── FEATURES ────────────────────────────────────────────────── */
@@ -384,24 +383,24 @@ body {
 }
 
 .game-layout {
-  display: flex; gap: 20px; align-items: flex-start;
-  max-width: 1000px; width: 100%;
+  display: flex; gap: 22px; align-items: flex-start;
+  max-width: 1320px; width: 100%; justify-content: center;
 }
 
-.board-area { flex: none; }
+.board-area { flex: none; display: flex; flex-direction: column; align-items: stretch; }
 
 .player-info {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 14px; margin: 6px 0;
+  padding: 8px 12px; margin: 6px 0;
   background: var(--bg-card); border-radius: var(--radius);
-  border: 1px solid var(--border); min-width: 400px;
+  border: 1px solid var(--border); width: 100%; min-width: 0;
 }
 
 .player-avatar {
-  width: 36px; height: 36px; border-radius: 50%;
+  width: 34px; height: 34px; border-radius: 50%;
   background: linear-gradient(135deg, var(--accent), var(--accent-dark));
   display: flex; align-items: center; justify-content: center;
-  font-size: 16px; font-weight: 700; color: #000; flex-shrink: 0;
+  font-size: 15px; font-weight: 700; color: #000; flex-shrink: 0;
 }
 
 .player-name { font-weight: 700; font-size: 14px; }
@@ -430,7 +429,9 @@ body {
 
 .board-wrapper {
   position: relative;
+  display: inline-block;
   user-select: none;
+  -webkit-user-select: none;
 }
 
 .board-coords-file {
@@ -453,71 +454,124 @@ body {
 .coord-rank { flex: 1; display: flex; align-items: center; justify-content: center; }
 
 #chess-board {
-  width: min(480px, calc(100vw - 200px));
-  height: min(480px, calc(100vw - 200px));
+  width: min(680px, calc(100vw - 380px));
+  height: min(680px, calc(100vw - 380px));
   display: grid; grid-template-columns: repeat(8, 1fr);
+  grid-template-rows: repeat(8, 1fr);
   border: 3px solid var(--accent-dark);
-  border-radius: 4px;
+  border-radius: 6px;
   box-shadow: var(--shadow), 0 0 40px rgba(0,0,0,0.5);
   overflow: hidden;
-  grid-template-rows: repeat(8, 1fr);
+  touch-action: none;
+  position: relative;
 }
 
 .square {
   display: flex; align-items: center; justify-content: center;
   position: relative; cursor: pointer;
-  transition: background-color 0.1s;
+  user-select: none;
 }
 
 .square.light { background: var(--board-light); }
 .square.dark { background: var(--board-dark); }
 
-.square.selected { background: var(--board-highlight) !important; }
+.square.selected {
+  background: rgba(100, 200, 100, 0.58) !important;
+  box-shadow: inset 0 0 0 3px rgba(60, 190, 60, 0.85);
+}
 .square.legal-move::after {
   content: '';
   position: absolute;
-  width: 30%; height: 30%;
+  width: 28%; height: 28%;
   border-radius: 50%;
-  background: var(--board-legal);
+  background: rgba(0, 0, 0, 0.22);
+  pointer-events: none;
+  z-index: 3;
 }
 .square.legal-capture::after {
   content: '';
   position: absolute; inset: 0;
-  border-radius: 0;
-  border: 4px solid var(--board-legal);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 4px rgba(0, 0, 0, 0.26);
   pointer-events: none;
+  z-index: 3;
 }
-.square.last-move { background: var(--board-move) !important; }
-.square.in-check { background: var(--board-check) !important; }
+.square.last-move.light { background: rgba(205, 210, 106, 0.78) !important; }
+.square.last-move.dark  { background: rgba(170, 162, 58, 0.78) !important; }
+.square.premove.light   { background: rgba(255, 150, 50, 0.65) !important; }
+.square.premove.dark    { background: rgba(210, 90, 0, 0.65) !important; }
+.square.in-check {
+  background: radial-gradient(circle, rgba(255,40,40,0.9) 0%, rgba(220,30,30,0.65) 55%, rgba(180,0,0,0.15) 100%) !important;
+}
+.square.drag-over {
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.75);
+}
+
+.sq-coord {
+  position: absolute;
+  font-family: var(--font-body);
+  font-size: var(--sq-coord-fs, 12px);
+  font-weight: 700;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+  z-index: 2;
+  opacity: 0.92;
+}
+.sq-coord-rank { left: 4px; top: 3px; }
+.sq-coord-file { right: 4px; bottom: 2px; }
 
 .piece {
-  width: 88%; height: 88%;
+  width: 100%; height: 100%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 0; /* use SVG/image */
+  font-size: 0;
   position: relative; z-index: 1;
-  transition: transform 0.1s;
   cursor: grab;
 }
 
-.piece:active { cursor: grabbing; transform: scale(1.15); }
-
 .piece img {
-  width: 100%; height: 100%;
+  width: 84%; height: 84%;
+  object-fit: contain;
   pointer-events: none;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+  user-select: none;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.42));
 }
+
+.square.dragging-origin .piece { opacity: 0.22; }
 
 /* Piece dragging */
 .piece-dragging {
   position: fixed; pointer-events: none; z-index: 9999;
-  transform: translate(-50%, -50%) scale(1.2);
+  transform: translate(-50%, -50%) scale(1.14);
+  display: flex; align-items: center; justify-content: center;
+}
+.piece-dragging img {
+  width: 90%; height: 90%;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 18px rgba(0,0,0,0.65));
+}
+
+.board-resize-handle {
+  position: absolute; right: 0; bottom: 0;
+  width: 20px; height: 20px;
+  cursor: nwse-resize; z-index: 20;
+  display: flex; align-items: flex-end; justify-content: flex-end;
+  padding: 2px;
+  background: linear-gradient(135deg, transparent 42%, rgba(201,168,76,.6) 42%);
+  border-bottom-right-radius: 5px;
+  touch-action: none;
+}
+.board-resize-handle::after {
+  content: ''; display: block; width: 8px; height: 8px;
+  background: repeating-linear-gradient(135deg, var(--accent) 0px, var(--accent) 1.5px, transparent 1.5px, transparent 4px);
+  opacity: .85;
 }
 
 /* ── GAME PANEL ──────────────────────────────────────────────── */
 .game-panel {
   flex: 1;
   display: flex; flex-direction: column; gap: 12px;
-  min-width: 200px; max-width: 260px;
+  min-width: 260px; max-width: 340px;
 }
 
 .moves-list {
@@ -564,13 +618,14 @@ body {
 
 /* ── ANALYSIS PAGE ───────────────────────────────────────────── */
 #page-analysis {
-  padding: 16px;
-  max-width: 1100px; margin: 0 auto;
+  padding: 12px 20px;
+  max-width: 1400px; margin: 0 auto;
 }
 
 .analysis-layout {
-  display: flex; gap: 20px;
-  margin-top: 16px; align-items: flex-start;
+  display: flex; gap: 22px;
+  margin-top: 10px; align-items: flex-start;
+  justify-content: center;
 }
 
 .engine-panel {
@@ -811,7 +866,6 @@ body {
 .settings-label-name { font-weight: 600; font-size: 14px; }
 .settings-label-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 
-/* Toggle switch */
 .toggle {
   position: relative; width: 44px; height: 24px;
   flex-shrink: 0;
@@ -831,7 +885,6 @@ body {
 .toggle input:checked + .toggle-slider { background: var(--accent-glow); border-color: var(--accent); }
 .toggle input:checked + .toggle-slider::before { transform: translateX(20px); background: var(--accent); }
 
-/* Color picker rows */
 .color-options { display: flex; gap: 8px; }
 .color-option {
   width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
@@ -975,12 +1028,10 @@ body {
 
 .page-header p { color: var(--text-secondary); font-size: 14px; margin-top: 4px; }
 
-/* ── RESPONSIVE ───────────────────────────────────────────────── */
 /* ══════════════════════════════════════════════════════════════
    МОБИЛЬНАЯ АДАПТАЦИЯ
    ══════════════════════════════════════════════════════════════ */
 
-/* ── Бургер-кнопка (скрыта на десктопе) ──────────────────── */
 .burger-btn {
   display: none;
   flex-direction: column; justify-content: center; gap: 5px;
@@ -998,7 +1049,6 @@ body {
 .burger-btn.open span:nth-child(2) { opacity: 0; }
 .burger-btn.open span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 
-/* ── Мобильное меню ──────────────────────────────────────── */
 .mobile-nav {
   display: none;
   position: fixed; top: var(--header-h); left: 0; right: 0; bottom: 0;
@@ -1043,15 +1093,11 @@ body {
   display: flex; flex-direction: column; gap: 8px;
 }
 
-/* ── Планшет (768px–1024px) ──────────────────────────────── */
 @media (max-width: 1024px) {
   .online-badge { display: none; }
 }
 
-/* ── Мобильный (≤768px) ──────────────────────────────────── */
 @media (max-width: 768px) {
-
-  /* Header */
   #header { padding: 0 16px; gap: 10px; }
   .logo-icon { font-size: 22px; }
   .logo { font-size: 19px; }
@@ -1060,18 +1106,15 @@ body {
   .online-badge { display: none; }
   .header-right { gap: 6px; }
 
-  /* Скрываем рейтинг-пилюлю в шапке на маленьких экранах */
   .header-right .rating-pill { display: none; }
   .user-btn { padding: 4px 8px; gap: 6px; }
 
-  /* Hero */
   .hero { flex-direction: column; padding: 32px 16px 24px; gap: 24px; text-align: center; }
   .hero-visual { max-width: 260px; margin: 0 auto; }
   .hero h1 { font-size: 28px !important; }
   .hero-subtitle { font-size: 14px !important; }
   .hero-buttons { justify-content: center; flex-wrap: wrap; }
 
-  /* Доска */
   #chess-board {
     width: min(90vw, 420px) !important;
     height: min(90vw, 420px) !important;
@@ -1084,7 +1127,6 @@ body {
   .player-clock { font-size: 20px !important; }
   .board-wrapper { width: min(90vw, 420px); }
 
-  /* Игра */
   .game-layout { flex-direction: column; align-items: center; gap: 12px; }
   .board-area { width: 100%; display: flex; flex-direction: column; align-items: center; }
   .game-panel {
@@ -1093,21 +1135,17 @@ body {
     order: 2;
   }
 
-  /* Список ходов — компактнее */
   .moves-list { max-height: 120px; }
   .moves-table td { font-size: 12px; padding: 2px 4px; }
 
-  /* Кнопки под доской */
   .game-actions { flex-wrap: wrap; gap: 6px; }
   .game-actions .btn { font-size: 12px; padding: 6px 10px; }
 
-  /* Лобби */
   .lobby-layout { grid-template-columns: 1fr; gap: 16px; }
   .lobby-panel { padding: 16px; }
   .tc-options { gap: 6px; }
   .tc-btn { padding: 6px 12px; font-size: 13px; }
 
-  /* Анализ / Редактор */
   .analysis-layout, .editor-layout { flex-direction: column; align-items: center; }
   .analysis-panel, .editor-panel { width: 100%; max-width: 100%; }
   #analysis-board-container, #editor-board-container {
@@ -1115,37 +1153,29 @@ body {
     height: min(90vw, 420px);
   }
 
-  /* Модалки */
   .modal { margin: 16px; max-width: calc(100vw - 32px) !important; width: 100% !important; }
   .modal h2 { font-size: 18px; }
 
-  /* Страницы */
   .settings-section { padding: 16px; }
   .settings-section .settings-row { flex-direction: column; gap: 8px; }
   .page-header h1 { font-size: 22px; }
 
-  /* Общее */
   .section-title { font-size: 20px !important; }
   [style*="padding:40px"] { padding: 20px 16px !important; }
   [style*="padding: 40px"] { padding: 20px 16px !important; }
 
-  /* Чат */
   #global-chat-messages { height: 220px; }
 
-  /* Таблица лидеров */
   .leaderboard-row { padding: 8px 10px; gap: 8px; }
 
-  /* Профиль */
   .profile-grid { grid-template-columns: 1fr !important; }
 
-  /* Кнопки — минимум 44px для тача */
   .btn { min-height: 40px; }
   .btn-sm { min-height: 34px; }
 }
 
-/* ── Совсем маленький (≤380px) ───────────────────────────── */
 @media (max-width: 380px) {
-  .logo span:last-child { display: none; } /* скрываем текст, оставляем иконку */
+  .logo span:last-child { display: none; }
   #chess-board {
     width: calc(100vw - 16px) !important;
     height: calc(100vw - 16px) !important;
@@ -1214,6 +1244,7 @@ a:hover { text-decoration: underline; }
 .mt-8 { margin-top: 8px; }
 .mt-16 { margin-top: 16px; }
 .mb-16 { margin-bottom: 16px; }
+
 /* ── AI-комментатор на странице анализа (issue #71) ─────────── */
 #ai-commentary.ai-say {
   animation: aiPhraseIn .45s cubic-bezier(.22,1,.36,1);
@@ -1225,12 +1256,8 @@ a:hover { text-decoration: underline; }
 
 /* ══════════════════════════════════════════════════════════════
    COMMON COMPONENTS (унификация, DRY)
-   Общие стили модальных окон/форм/статус-плашек, которые раньше
-   дублировались инлайн-<style> в каждой странице. Страницы
-   подключают /css/main.css и используют эти классы напрямую.
    ══════════════════════════════════════════════════════════════ */
 
-/* ── Модальные окна (overlay + box) ──────────────────────────── */
 .modal-overlay {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.7);
@@ -1288,7 +1315,6 @@ a:hover { text-decoration: underline; }
   border-top: 1px solid var(--border);
 }
 
-/* ── Формы: сетка + поля ─────────────────────────────────────── */
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1317,7 +1343,6 @@ select.form-select option { background: var(--bg-card); }
   .form-grid { grid-template-columns: 1fr; }
 }
 
-/* ── Кнопки модалок ──────────────────────────────────────────── */
 .btn-cancel {
   padding: 10px 20px;
   background: var(--bg-secondary);
@@ -1355,7 +1380,6 @@ select.form-select option { background: var(--bg-card); }
   transform: none;
 }
 
-/* ── Blacklist-теги ──────────────────────────────────────────── */
 .blacklist-input-row {
   display: flex;
   gap: 8px;
@@ -1401,7 +1425,6 @@ select.form-select option { background: var(--bg-card); }
   color: var(--accent);
 }
 
-/* ── Плашка статуса с пульсирующей точкой ────────────────────── */
 .status-dot {
   display: inline-block;
   width: 8px; height: 8px;
@@ -1416,19 +1439,10 @@ select.form-select option { background: var(--bg-card); }
   100% { box-shadow: 0 0 0 0 rgba(76,175,114,0); }
 }
 
-/* ── Дополнительный спиннер (тонкий, для кнопок) ─────────────── */
 @keyframes tSpin { to { transform: rotate(360deg); } }
 
 /* ══════════════════════════════════════════════════════════════
-   ЛЕТАЮЩИЕ ФИГУРЫ НА ФОНЕ — общий компонент (2Е, унификация).
-   Раньше анимации дублировались: .bg-decor/.bg-piece/@pieceRise в
-   blog.html и .onboard-bg-shapes/.onboard-shape/@floatPiece в index.html.
-   Теперь один компонент с двумя режимами:
-   • rising   — фигуры всплывают снизу один раз (управляется JS, blog);
-   • drifting — фигуры непрерывно дрейфуют (чистый CSS, index).
-   Модификаторы контейнера:
-   • .ch-float-decor--abs      — absolute вместо fixed (внутри оверлея);
-   • .ch-float-decor--desktop  — показывать только на ПК (≥769px).
+   ЛЕТАЮЩИЕ ФИГУРЫ НА ФОНЕ — общий компонент
    ══════════════════════════════════════════════════════════════ */
 .ch-float-decor{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden}
 .ch-float-decor--abs{position:absolute}

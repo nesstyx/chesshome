@@ -1,23 +1,15 @@
 // analysis-page.js — отдельная страница «Анализ партии» (/analysis)
-// Вынесено из SPA (index.html + app/analysis.js). Логика загрузки FEN/PGN
-// не менялась; заменены SPA-хуки (pages['analysis'], showPage) на
-// собственный запуск. Обычный классический скрипт, подключается после
-// board.js и stockfish-ui.js.
 
-// stockfish-ui.js и board.js проверяют глобальный socket (удалённый движок)
 let socket = null;
 
-// i18n-хелпер (как в SPA: app/core.js)
 function T(key, fallback) {
   try {
     const v = window.CH_I18N ? window.CH_I18N.t(key) : undefined;
     if (v && v !== key) return v;
-  } catch (e) { /* i18n недоступен */ }
+  } catch (e) {}
   return fallback !== undefined ? fallback : key;
 }
 
-// Настройки интерфейса (как в SPA: app/settings.js)
-// board.js проверяет typeof getSettings 'function' (звуки, подсказки, координаты)
 function getSettings() {
   const defaults = { sounds: true, hints: true, coords: true, animation: true, boardLight: '#f0d9b5', boardDark: '#b58863' };
   try { return { ...defaults, ...JSON.parse(localStorage.getItem('ch_settings') || '{}') }; } catch { return defaults; }
@@ -29,10 +21,6 @@ function applySettings() {
 }
 applySettings();
 
-// Запросы анализа: склеиваем подряд идущие вызовы
-// При старте страницы анализ может запрашиваться несколько раз подряд
-// (loadAnalysis → loadFEN → явный requestAnalysis), а стрелки ← → тоже шлют
-// запрос на каждый шаг. Один отложенный вызов вместо пачки.
 (function () {
   const original = window.requestAnalysis;
   if (typeof original !== 'function') return;
@@ -43,8 +31,6 @@ applySettings();
   };
 })();
 
-// Удалённый движок (домашний воркер) — как в SPA, только для вошедших
-// Гости считаются локальным Stockfish в браузере.
 async function connectRemoteEngine() {
   try {
     const r = await fetch('/api/me', { credentials: 'same-origin' });
@@ -52,10 +38,9 @@ async function connectRemoteEngine() {
     socket = io();
     socket.on('analyze_line', line => StockfishAnalyzer.handleRemoteMessage(line));
     socket.on('analyze_unavailable', () => StockfishAnalyzer.handleRemoteUnavailable());
-  } catch (e) { /* без сокета работает локальный движок */ }
+  } catch (e) {}
 }
 
-// Загрузка позиции / партии (код из app/analysis.js, без изменений логики)
 function loadAnalysisFENFrom(fen) {
   if (!fen || typeof fen !== 'string') return;
   if (!isValidAnalysisFEN(fen)) {
@@ -69,7 +54,6 @@ function loadAnalysisFENFrom(fen) {
   setTimeout(() => { if (typeof requestAnalysis === 'function') requestAnalysis(); }, 60);
 }
 
-// Базовая проверка FEN перед отдачей движку: распарсился и оба короля на месте
 function isValidAnalysisFEN(fen) {
   try {
     const st = ChessEngine.parseFEN(fen);
@@ -98,12 +82,10 @@ function loadAnalysisFEN() {
   toast('Позиция загружена', 'success');
 }
 
-// Запуск страницы (вместо pages['analysis'] из SPA)
 function initAnalysisPage() {
   if (!StockfishAnalyzer.isReady()) StockfishAnalyzer.init();
   connectRemoteEngine();
 
-  // Передача позиции/партии с других страниц идёт через sessionStorage/localStorage
   let pendingFen = null;
   try { pendingFen = sessionStorage.getItem('ch_analysis_fen'); } catch (e) {}
   let savedGame = null;
@@ -111,8 +93,6 @@ function initAnalysisPage() {
 
   if (pendingFen) {
     try { sessionStorage.removeItem('ch_analysis_fen'); } catch (e) {}
-    // loadAnalysis() переводит доску в режим анализа (иначе ходы на ней не
-    // анализировались бы), затем ставим переданную позицию.
     chessBoard.loadAnalysis();
     loadAnalysisFENFrom(pendingFen);
   } else if (savedGame) {
@@ -121,20 +101,18 @@ function initAnalysisPage() {
       loadGameIntoAnalysis(JSON.parse(savedGame));
     } catch (e) { chessBoard.loadAnalysis(); }
   } else {
-    chessBoard.loadAnalysis();            // обычный запуск со стартовой позиции
+    chessBoard.loadAnalysis();
   }
 
   chessBoard.render();
   chessBoard.initSizeSlider();
 
-  // Текущий FEN под полем ввода
   setInterval(() => {
     const el = document.getElementById('analysis-current-fen');
     if (el) el.textContent = chessBoard.getFEN();
   }, 1000);
 }
 
-// v2: движок вкл/выкл, настройки, авто-FEN/PGN, стрелка, график, разбор партии
 const $id = id => document.getElementById(id);
 const sanTok = t => t.replace(/[+#!?]/g, '');
 let _evals = [], _sig = '', _lastFen = '';
@@ -155,6 +133,7 @@ function onBoardRender() {
   if (fi && document.activeElement !== fi) fi.value = view;
   if (pg && document.activeElement !== pg) pg.value = buildPGN();
   const c = $id('move-counter'); if (c) c.textContent = chessBoard.viewIndex + ' / ' + (fens.length - 1);
+  const eb = $id('eval-bar-container'); if (eb) eb.classList.toggle('flipped', !!chessBoard.flipped);
   if (view !== _lastFen) { _lastFen = view; requestAnalysis(); }
   markMoves(); drawArrow(); drawGraph();
 }
@@ -164,9 +143,13 @@ document.addEventListener('sf:done', e => {
   if (e.detail.fen === chessBoard.getViewFEN() && e.detail.ev !== null) { _evals[chessBoard.viewIndex] = e.detail.ev; markMoves(); drawGraph(); }
 });
 
-// пометки ?! ? ?? в списке ходов
 function markMoves() {
-  document.querySelectorAll('#moves-table-body .move-cell').forEach((td, k) => {
+  document.querySelectorAll('#moves-table-body .move-cell').forEach(td => {
+    td.classList.remove('q-blunder', 'q-mistake', 'q-inacc');
+    td.removeAttribute('title');
+    const ply = parseInt(td.dataset.ply, 10);
+    if (!ply || !td.textContent.trim()) return;
+    const k = ply - 1;
     const a = _evals[k], b = _evals[k + 1];
     if (a == null || b == null) return;
     const A = Math.max(-10, Math.min(10, a)), B = Math.max(-10, Math.min(10, b));
@@ -176,7 +159,6 @@ function markMoves() {
   });
 }
 
-// стрелки лучших ходов поверх доски
 function drawArrow() {
   const board = $id('chess-board'); if (!board) return;
   board.querySelector('.sf-arrows')?.remove();
@@ -197,7 +179,6 @@ function drawArrow() {
   board.insertAdjacentHTML('beforeend', `<svg class="sf-arrows" viewBox="0 0 100 100" style="position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:9">${h}</svg>`);
 }
 
-// график оценки (клик — переход к ходу)
 function drawGraph() {
   const box = $id('eval-graph'); if (!box) return;
   const n = chessBoard.getFENs().length, pts = [];
@@ -223,7 +204,6 @@ async function reviewGame() {
   if (res && res.length === fens.length) toast('Разбор готов: ошибки помечены в списке ходов', 'success');
 }
 
-// PGN: загрузка с полным списком ходов, автоматически при вводе
 function loadPGN(silent) {
   const raw = $id('pgn-input')?.value?.trim();
   if (!raw) return;
@@ -266,6 +246,13 @@ function initV2UI() {
     el.addEventListener('input', () => out && (out.textContent = el.value));
     el.addEventListener('change', () => { StockfishAnalyzer.set({ [key]: chk ? el.checked : +el.value }); if (key === 'arrow') drawArrow(); });
   });
+  const engBox = $id('engine-lines');
+  if (engBox) {
+    engBox.addEventListener('click', e => {
+      const line = e.target.closest('.eng-line');
+      if (line?.dataset.uci) chessBoard.playUCI(line.dataset.uci);
+    });
+  }
   document.addEventListener('sf:ready', syncSupport);
   document.addEventListener('sf:toggle', drawArrow);
   const pg = $id('pgn-input'); let t;
@@ -285,6 +272,5 @@ function initV2UI() {
 }
 initV2UI();
 
-// Ждём словарь i18n, чтобы подписи панели (AI-комментатор) не мигали ключами
 if (window.CH_I18N && window.CH_I18N.onReady) window.CH_I18N.onReady(initAnalysisPage);
 else initAnalysisPage();
