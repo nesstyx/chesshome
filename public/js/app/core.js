@@ -232,7 +232,12 @@ function connectSocket() {
   socket.on('challenges_update', challenges => renderChallengeList(challenges));
   socket.on('game_start', data => {
     if (data.moves && data.moves.length > 0) {
-      if (location.pathname === '/game/' + data.gameId) {
+      // Авто-реджойн: либо мы уже на /game/<id>, либо пришли по ссылке
+      // /game?rejoin=<id> (редирект сервера после перезагрузки страницы
+      // во время активной партии — routes/game-page.js).
+      let rejoinParam = null;
+      try { rejoinParam = new URLSearchParams(location.search).get('rejoin'); } catch (e) {}
+      if (location.pathname === '/game/' + data.gameId || rejoinParam === data.gameId) {
         _rejoinData = data;
         doRejoin();
       } else {

@@ -961,12 +961,22 @@ const chessBoard = (() => {
       </tr>`;
     }
     table.innerHTML = html;
+    // Автоскролл — ТОЛЬКО внутри контейнера списка ходов.
+    // scrollIntoView() прокручивает всех прокручиваемых предков, включая сам
+    // документ: на телефоне браузер при каждом тапе по доске панорамирует экран вбок
+    // (или вниз), чтобы показать клетку с текущим ходом. Прокручиваем
+    // getBoundingClientRect-ами только .moves-list — страница не трогается.
+    const movesDiv = table.closest('.moves-list');
     const curCell = table.querySelector('.move-cell.current');
-    if (curCell) {
-      curCell.scrollIntoView({ block: 'nearest' });
-    } else {
-      const movesDiv = table.closest('.moves-list');
-      if (movesDiv) movesDiv.scrollTop = movesDiv.scrollHeight;
+    if (curCell && movesDiv) {
+      const cd = curCell.getBoundingClientRect();
+      const md = movesDiv.getBoundingClientRect();
+      if (cd.top < md.top) movesDiv.scrollTop += cd.top - md.top;
+      else if (cd.bottom > md.bottom) movesDiv.scrollTop += cd.bottom - md.bottom;
+      if (cd.left < md.left) movesDiv.scrollLeft += cd.left - md.left;
+      else if (cd.right > md.right) movesDiv.scrollLeft += cd.right - md.right;
+    } else if (movesDiv) {
+      movesDiv.scrollTop = movesDiv.scrollHeight;
     }
   }
 
