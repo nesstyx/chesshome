@@ -16,6 +16,30 @@ const activeGames       = new Map();
 
 const tournamentGames   = new Map();
 
+// Реванш: после завершения обычной (не турнирной) партии с хотя бы одним полным
+// ходом запоминаем её параметры, чтобы игроки могли предложить друг другу
+// сыграть ещё раз. Ключ — id только что завершённой партии.
+// Запись: { white, black, timeControl, rated, offerBy, expiresAt }
+// Игрок уже сидит в незавершённой партии (обычной или турнирной)?
+// Клиент умеет вести только одну онлайн-партию (одна доска, события без
+// фильтра по gameId), поэтому вторую параллельную партию не стартуем.
+function isUserInGame(username) {
+  const low = String(username).toLowerCase();
+  for (const map of [activeGames, tournamentGames]) {
+    for (const g of map.values()) {
+      if (String(g.white).toLowerCase() === low || String(g.black).toLowerCase() === low) return true;
+    }
+  }
+  return false;
+}
+
+const REMATCH_OFFER_TTL = 2 * 60 * 1000;
+const rematchPool       = new Map();
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, r] of rematchPool) if (r.expiresAt <= now) rematchPool.delete(id);
+}, 30 * 1000).unref();
+
 
 // Часы партии — источник истины ТОЛЬКО сервер
 // Сервер сам считает оставшееся время по game.lastMoveAt и не
@@ -61,8 +85,16 @@ async function endGameAuthoritative(gameId, game, result, reason) {
     await recordGame(game, result, reason);
     await updateStats(game.white, game.black, result, game.rated !== false);
   }
+  const canRematch = !isTournament && hasFullMove(game);
+  if (canRematch) {
+    rematchPool.set(gameId, {
+      white: game.white, black: game.black, timeControl: game.timeControl,
+      rated: game.rated !== false, offerBy: null, expiresAt: Date.now() + REMATCH_OFFER_TTL,
+    });
+  }
   const core = require('../core');
-  const payload = { gameId, result, reason, white: game.white, black: game.black };
+  // rematch: true — клиент показывает кнопку «Реванш» (см. rematchPool выше)
+  const payload = { gameId, result, reason, white: game.white, black: game.black, rematch: canRematch };
   [core.findSocketByUsername(game.white), core.findSocketByUsername(game.black)].forEach(s => s?.emit('game_ended', payload));
 }
 
@@ -478,6 +510,9 @@ Object.assign(module.exports, {
   calcNewRatings,
   updateStats,
   startGame,
+  rematchPool,
+  REMATCH_OFFER_TTL,
+  isUserInGame,
   FRIENDLY_FIRST_MOVE_TIMEOUT,
   serverChess,
 });

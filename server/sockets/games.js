@@ -1,6 +1,11 @@
 // sockets/games.js — геймплей: ходы, финалы, сдача, ничьи, чат партии
 const {
+  io,
   activeGames,
+  pendingChallenges,
+  isUserInGame,
+  rematchPool,
+  startGame,
   endGameAuthoritative,
   findSocketByUsername,
   emitToAdmins,
@@ -220,5 +225,80 @@ module.exports = function registerGames(socket) {
     if (game.chatMessages.length > 100) game.chatMessages.shift();
     socket.emit('game_chat', msg);
     const os = findSocketByUsername(opp); if (os) os.emit('game_chat', msg);
+  });
+
+  // ── Реванш ──────────────────────────────────────────────────────────────
+  // После завершения обычной партии (см. rematchPool в game.service.js) любой
+  // из игроков может предложить реванш. Второй получает 'rematch_offered' и
+  // принимает или отклоняет. При согласии стартует новая партия с тем же
+  // контролем времени и той же рейтинговостью, цвета меняются местами; клиенты
+  // получают обычное событие 'game_start'.
+  const getRematch = (gameId) => {
+    if (typeof gameId !== 'string') return null;
+    const r = rematchPool.get(gameId);
+    if (!r) { socket.emit('rematch_unavailable', { gameId, reason: 'closed' }); return null; }
+    if (r.expiresAt <= Date.now()) { rematchPool.delete(gameId); socket.emit('rematch_unavailable', { gameId, reason: 'closed' }); return null; }
+    if (r.white !== socket.username && r.black !== socket.username) return null;
+    return r;
+  };
+
+  const startRematch = (gameId, r) => {
+    const ws = findSocketByUsername(r.white);
+    const bs = findSocketByUsername(r.black);
+    const fail = (reason) => {
+      rematchPool.delete(gameId);
+      [ws, bs].forEach(s => s?.emit('rematch_unavailable', { gameId, reason }));
+    };
+    if (!ws || !bs) return fail('offline');
+    if (isUserInGame(r.white) || isUserInGame(r.black)) return fail('busy');
+    rematchPool.delete(gameId);
+    // Открытые вызовы обоих игроков в лобби больше не актуальны — убираем,
+    // чтобы их не приняли, пока игроки заняты реваншем.
+    let dropped = false;
+    for (let i = pendingChallenges.length - 1; i >= 0; i--) {
+      if (pendingChallenges[i].from === r.white || pendingChallenges[i].from === r.black) { pendingChallenges.splice(i, 1); dropped = true; }
+    }
+    if (dropped) io.emit('challenges_update', pendingChallenges.filter(c => Date.now() - c.createdAt < 60000));
+    // Цвета меняются: прежние чёрные играют белыми (startGame: challenge.from получает challenge.color).
+    startGame({ username: r.white }, { from: r.black, color: 'white', timeControl: r.timeControl, rated: r.rated });
+  };
+
+  socket.on('rematch_offer', ({ gameId } = {}) => {
+    if (!socket.username) return;
+    const r = getRematch(gameId); if (!r) return;
+    const opp = r.white === socket.username ? r.black : r.white;
+    if (r.offerBy === opp) return startRematch(gameId, r);   // оба нажали — стартуем сразу
+    if (r.offerBy === socket.username) return;                // уже отправлено
+    const os = findSocketByUsername(opp);
+    if (!os) { socket.emit('rematch_unavailable', { gameId, reason: 'offline' }); return; }
+    r.offerBy = socket.username;
+    socket.emit('rematch_sent', { gameId });
+    os.emit('rematch_offered', { gameId, from: socket.username });
+  });
+
+  socket.on('rematch_accept', ({ gameId } = {}) => {
+    if (!socket.username) return;
+    const r = getRematch(gameId); if (!r) return;
+    const opp = r.white === socket.username ? r.black : r.white;
+    if (r.offerBy !== opp) return;                            // принимать можно только чужое предложение
+    startRematch(gameId, r);
+  });
+
+  socket.on('rematch_decline', ({ gameId } = {}) => {
+    if (!socket.username) return;
+    const r = getRematch(gameId); if (!r) return;
+    const opp = r.white === socket.username ? r.black : r.white;
+    if (r.offerBy !== opp) return;
+    rematchPool.delete(gameId);                               // после отказа реванш по этой партии закрыт
+    findSocketByUsername(opp)?.emit('rematch_declined', { gameId, by: socket.username });
+  });
+
+  socket.on('rematch_cancel', ({ gameId } = {}) => {
+    if (!socket.username) return;
+    const r = getRematch(gameId); if (!r) return;
+    if (r.offerBy !== socket.username) return;
+    r.offerBy = null;
+    const opp = r.white === socket.username ? r.black : r.white;
+    findSocketByUsername(opp)?.emit('rematch_cancelled', { gameId });
   });
 }

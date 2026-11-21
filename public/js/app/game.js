@@ -100,6 +100,8 @@ function showTournamentReturnBanner(tournamentId, tournamentName, isInterclub) {
 
 function startGameUI(data) {
   _currentGameData = data; // сохраняем для реджойн-баннера при уходе со страницы
+  rematchReset();          // новая партия (в т.ч. реванш) — прячем плашки реванша и окно результата
+  document.getElementById('modal-game-result')?.classList.remove('open');
   // Небольшая задержка — даём challenges_update отработать первым
   // чтобы DOM лобби не перезаписал наш переход на game
   setTimeout(() => {
@@ -127,3 +129,164 @@ function startGameUI(data) {
 }
 
 // GAME CHAT
+
+// РЕВАНШ
+// Сервер присылает game_ended с флагом rematch:true (обычная партия, сделан хотя бы
+// один полный ход). Дальше события rematch_* обрабатываются в /js/app/core.js,
+// а вся разметка строится здесь и показывается в двух местах: в окне результата
+// и на странице партии под кнопками «ничья / сдаться / анализ».
+// Состояния: idle (кнопка «Реванш») → sent (ждём ответ) | incoming (нам предложили) | closed.
+const REMATCH_UI_TTL = 2 * 60 * 1000; // как REMATCH_OFFER_TTL на сервере
+let _rematch = null;      // { gameId, opponent, state, note }
+let _rematchTimer = null;
+
+function _rmT(key, fb, name) {
+  const v = (typeof T === 'function') ? T(key, fb) : fb;
+  return name === undefined ? v : String(v).replace('{name}', name);
+}
+
+function _rmStyle() {
+  if (document.getElementById('rematch-style')) return;
+  const s = document.createElement('style');
+  s.id = 'rematch-style';
+  s.textContent = `
+    .rematch-box{margin-top:16px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+    .rematch-box .rematch-note{font-size:13px;color:var(--text-secondary)}
+    .rematch-box .rematch-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+    .rematch-incoming{padding:12px 16px;border:1px solid var(--accent);border-radius:14px;
+      background:rgba(201,168,76,.10);animation:rematchGlow 1.6s ease-in-out infinite}
+    .rematch-incoming .rematch-title{font-weight:700;font-size:14px;color:var(--accent);display:inline-block;
+      animation:rematchBounce 1s ease-in-out infinite}
+    .rematch-incoming .rematch-accept{animation:rematchBounce 1s ease-in-out infinite .15s}
+    @keyframes rematchBounce{0%,100%{transform:translateY(0)}30%{transform:translateY(-7px)}55%{transform:translateY(0)}72%{transform:translateY(-3px)}}
+    @keyframes rematchGlow{0%,100%{box-shadow:0 0 0 0 rgba(201,168,76,0)}50%{box-shadow:0 0 18px 2px rgba(201,168,76,.35)}}
+    @media (prefers-reduced-motion:reduce){.rematch-incoming,.rematch-incoming *{animation:none!important}}
+  `;
+  document.head.appendChild(s);
+}
+
+// Контейнеры создаём из JS, чтобы не править index.html
+function _rmBoxes() {
+  const boxes = [];
+  const modal = document.querySelector('#modal-game-result .modal');
+  if (modal) {
+    let box = document.getElementById('rematch-box-modal');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'rematch-box-modal';
+      const row = modal.querySelector('div[style*="justify-content:center"]');
+      if (row) row.parentNode.insertBefore(box, row); else modal.appendChild(box);
+    }
+    boxes.push(box);
+  }
+  const actions = document.querySelector('#page-game .game-actions');
+  if (actions) {
+    let box = document.getElementById('rematch-box-game');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'rematch-box-game';
+      actions.insertAdjacentElement('afterend', box);
+    }
+    boxes.push(box);
+  }
+  return boxes;
+}
+
+function _rmRender() {
+  _rmStyle();
+  const r = _rematch;
+  _rmBoxes().forEach(box => {
+    if (!r) { box.style.display = 'none'; box.innerHTML = ''; box.className = 'rematch-box'; return; }
+    const name = escapeHtml(r.opponent || '?');
+    let html = '';
+    if (r.state === 'idle') {
+      html = `<button class="btn btn-primary" data-rm="offer">⚔️ ${_rmT('game.rematch', 'Реванш')}</button>`;
+    } else if (r.state === 'sent') {
+      html = `<div class="rematch-note">⏳ ${_rmT('game.rematch_wait', 'Ожидаем ответ соперника…')}</div>
+              <button class="btn btn-ghost btn-sm" data-rm="cancel">${_rmT('game.rematch_cancel', 'Отменить')}</button>`;
+    } else if (r.state === 'incoming') {
+      html = `<div class="rematch-title">⚔️ ${_rmT('game.rematch_incoming', '{name} предлагает реванш', name)}</div>
+              <div class="rematch-row">
+                <button class="btn btn-primary rematch-accept" data-rm="accept">✓ ${_rmT('game.rematch_accept', 'Принять')}</button>
+                <button class="btn btn-secondary" data-rm="decline">✕ ${_rmT('game.rematch_decline', 'Отклонить')}</button>
+              </div>`;
+    } else {
+      html = `<div class="rematch-note">${r.note || ''}</div>`;
+    }
+    box.className = 'rematch-box' + (r.state === 'incoming' ? ' rematch-incoming' : '');
+    box.style.display = '';
+    box.innerHTML = html;
+  });
+}
+
+function _rmSet(state, note) {
+  if (!_rematch) return;
+  _rematch.state = state;
+  _rematch.note = note || '';
+  _rmRender();
+}
+
+function _rmOpen(gameId, opponent) {
+  clearTimeout(_rematchTimer);
+  _rematch = { gameId, opponent, state: 'idle', note: '' };
+  _rematchTimer = setTimeout(() => {
+    if (_rematch && _rematch.gameId === gameId) _rmSet('closed', _rmT('game.rematch_closed', 'Реванш больше недоступен'));
+  }, REMATCH_UI_TTL);
+}
+
+function rematchReset() {
+  clearTimeout(_rematchTimer);
+  _rematch = null;
+  _rmRender();
+}
+
+function rematchOnGameEnded(data) {
+  const me = currentUser && currentUser.username;
+  if (!data || !data.rematch || data.tournamentId || !me || (data.white !== me && data.black !== me)) {
+    rematchReset();
+    return;
+  }
+  _rmOpen(data.gameId, data.white === me ? data.black : data.white);
+  _rmRender();
+}
+
+function rematchOnSent(d)  { if (_rematch && _rematch.gameId === d.gameId) _rmSet('sent'); }
+
+function rematchOnOffered(d) {
+  // На случай, если предложение пришло раньше game_ended
+  if (!_rematch || _rematch.gameId !== d.gameId) _rmOpen(d.gameId, d.from);
+  _rmSet('incoming');
+  const onGamePage = document.getElementById('page-game')?.classList.contains('active');
+  if (!onGamePage && typeof toast === 'function') toast('⚔️ ' + _rmT('game.rematch_incoming', '{name} предлагает реванш', d.from), 'info');
+}
+
+function rematchOnDeclined(d) {
+  if (_rematch && _rematch.gameId === d.gameId) _rmSet('closed', _rmT('game.rematch_declined', '{name} отказался от реванша', _rematch.opponent));
+}
+
+function rematchOnCancelled(d) {
+  if (_rematch && _rematch.gameId === d.gameId) _rmSet('idle');
+}
+
+function rematchOnUnavailable(d) {
+  if (!_rematch || _rematch.gameId !== d.gameId) return;
+  const msgs = {
+    offline: _rmT('game.rematch_offline', 'Соперник вышел с сайта'),
+    busy:    _rmT('game.rematch_busy', 'Соперник уже играет другую партию'),
+  };
+  _rmSet('closed', msgs[d.reason] || _rmT('game.rematch_closed', 'Реванш больше недоступен'));
+}
+
+function rematchAction(action, btn) {
+  if (!_rematch || !socket) return;
+  const gameId = _rematch.gameId;
+  if (action === 'offer')   { if (btn) btn.disabled = true; socket.emit('rematch_offer', { gameId }); }
+  if (action === 'cancel')  { socket.emit('rematch_cancel', { gameId }); _rmSet('idle'); }
+  if (action === 'accept')  { if (btn) btn.disabled = true; socket.emit('rematch_accept', { gameId }); }
+  if (action === 'decline') { socket.emit('rematch_decline', { gameId }); _rmSet('closed', _rmT('game.rematch_you_declined', 'Вы отказались от реванша')); }
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest && e.target.closest('[data-rm]');
+  if (btn) rematchAction(btn.dataset.rm, btn);
+});

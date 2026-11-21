@@ -291,6 +291,7 @@ function connectSocket() {
     _pendingTournamentGame = null;
     document.getElementById('pending-t-banner')?.remove();
     chessBoard.onGameEnded(data);
+    if (typeof rematchOnGameEnded === 'function') rematchOnGameEnded(data);
     // После турнирной партии — показываем кнопку возврата
     if (tId) {
       setTimeout(() => showTournamentReturnBanner(tId, tName, tIsInterclub), 800);
@@ -299,6 +300,12 @@ function connectSocket() {
   socket.on('draw_offered', ({ from }) => {
     if (confirm(from + ' предлагает ничью. Принять?')) socket.emit('accept_draw', { gameId: chessBoard.gameId });
   });
+  // Реванш (логика и разметка — в /js/app/game.js)
+  socket.on('rematch_sent',        d => rematchOnSent(d));
+  socket.on('rematch_offered',     d => rematchOnOffered(d));
+  socket.on('rematch_declined',    d => rematchOnDeclined(d));
+  socket.on('rematch_cancelled',   d => rematchOnCancelled(d));
+  socket.on('rematch_unavailable', d => rematchOnUnavailable(d));
   socket.on('game_chat', ({ from, message }) => appendChatMsg(from, message, false));
 
   // Реджойн: восстанавливаем чат после перезагрузки страницы
