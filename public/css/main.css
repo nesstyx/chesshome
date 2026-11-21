@@ -56,6 +56,19 @@ body {
   overflow-x: hidden;
 }
 
+/* Мобильные: жёстко запрещаем горизонтальный скролл документа.
+   overflow-x: hidden на body не мешает scrollIntoView/focus программно
+   панорамирует экран вбок на телефоне; overflow-x: clip делает страницу
+   физически непрокручиваемой по горизонтали. */
+@supports (overflow-x: clip) {
+  html, body { overflow-x: clip; }
+}
+
+/* Быстрые тапы по доске и кнопкам: убираем задержку/двойной тап-зум */
+.board-wrapper, .board-wrapper *, .moves-list, .btn, .btn-sm, .player-info {
+  touch-action: manipulation;
+}
+
 /* ── SCROLLBAR ────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg-primary); }

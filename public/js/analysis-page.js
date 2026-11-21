@@ -75,6 +75,33 @@ function loadGameIntoAnalysis(game) {
     .replace('{n}', Math.floor(game.moves.length / 2)), 'success');
 }
 
+// Партия по ссылке /analysis?game=<id> — подтягиваем с сервера
+async function loadGameFromServer(gameId) {
+  try {
+    const r = await fetch('/api/games/' + encodeURIComponent(gameId), { credentials: 'same-origin' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const game = await r.json();
+    if (!game || !Array.isArray(game.moves) || !game.moves.length) throw new Error('Партия пуста');
+    // Мост-страница /game/<id> могла оставить страховочную копию партии —
+    // раз API отдал данные, stash больше не нужен
+    try { localStorage.removeItem('ch_analysis_game_stash'); } catch (e2) {}
+    loadGameIntoAnalysis(game);
+  } catch (e) {
+    // Фоллбэк: данные партии, переданные в localStorage со страницы-моста
+    // /game/<id> (покрывает старые турнирные партии, если /api/games/:id
+    // их не отдаёт). См. routes/game-page.js.
+    let stashed = null;
+    try { stashed = JSON.parse(localStorage.getItem('ch_analysis_game_stash') || 'null'); } catch (e2) {}
+    if (stashed && Array.isArray(stashed.moves) && stashed.moves.length) {
+      try { localStorage.removeItem('ch_analysis_game_stash'); } catch (e2) {}
+      loadGameIntoAnalysis(stashed);
+      return;
+    }
+    console.warn('loadGameFromServer:', e);
+    toast(T('game.load_failed', 'Не удалось загрузить партию'), 'error');
+  }
+}
+
 function loadAnalysisFEN() {
   const fen = document.getElementById('analysis-fen-input')?.value?.trim();
   if (!fen) return;
@@ -90,6 +117,18 @@ function initAnalysisPage() {
   try { pendingFen = sessionStorage.getItem('ch_analysis_fen'); } catch (e) {}
   let savedGame = null;
   try { savedGame = localStorage.getItem('ch_analysis_game'); } catch (e) {}
+
+  // Ссылка на конкретную партию (/analysis?game=<id> или /game/<id> →
+  // редирект сюда) имеет приоритет над sessionStorage/localStorage.
+  let urlGameId = null;
+  try { urlGameId = new URLSearchParams(location.search).get('game'); } catch (e) {}
+  if (urlGameId) {
+    chessBoard.loadAnalysis();
+    chessBoard.render();
+    chessBoard.initSizeSlider();
+    loadGameFromServer(urlGameId);
+    return;
+  }
 
   if (pendingFen) {
     try { sessionStorage.removeItem('ch_analysis_fen'); } catch (e) {}
