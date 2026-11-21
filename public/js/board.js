@@ -15,15 +15,13 @@ const chessBoard = (() => {
   let whiteTime = 600, blackTime = 600;
   let clockInterval = null;
   let clockRunning = false;
-  // activeColor теперь хранит чьё время ТИКАЕТ (кто ходит прямо сейчас)
   let activeColor = 'w';
 
-  // i18n-хелпер: словарь может быть ещё не загружен — тогда русский fallback
   function T(key, fallback) {
     try {
       const v = window.CH_I18N ? window.CH_I18N.t(key) : undefined;
       if (v && v !== key) return v;
-    } catch (e) { /* i18n недоступен */ }
+    } catch (e) {}
     return fallback !== undefined ? fallback : key;
   }
 
@@ -34,104 +32,157 @@ const chessBoard = (() => {
   let gameMode = 'local'; // 'local' | 'online' | 'analysis'
   let isFlipped = false;
 
-  // Premove (преймув) — ход запланированный на чужой ход
+  // Premove
   let premove = null; // { from, to, promotion? }
-  let premoveSquares = []; // [from, to] для подсветки
+  let premoveSquares = [];
 
-  // ПКМ-АННОТАЦИИ (кружки и стрелки, как на lichess)
-  let annotations = []; // { type: 'circle'|'arrow', sq?, from?, to? }
-  let rmbStartSq = null; // квадрат с которого началось нажатие ПКМ
+  // ПКМ-АННОТАЦИИ
+  let annotations = [];
+  let rmbStartSq = null;
+  let rmbGestureActive = false;
 
-  // PIECE_IMGS comes from pieces.js (inline SVG, no external requests)
+  // Pointer Drag & Click
+  let dragState = null;
+  let hoverSq = null;
 
-  // РЕНДЕР ДОСКИ
   // РАЗМЕР ДОСКИ
   let _boardPx = (() => {
-    const v = parseInt(localStorage.getItem('ch_board_size') || '0');
-    return v >= 280 && v <= 800 ? v : 0;
+    const v = parseInt(localStorage.getItem('ch_board_size') || '0', 10);
+    return v >= 280 && v <= 860 ? v : 0;
   })();
+
+  function computeAutoSize() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    if (w <= 768) {
+      if (window.matchMedia('(orientation: landscape)').matches) {
+        return Math.max(260, Math.min(h - 130, 420));
+      }
+      return Math.max(280, Math.min(w - 20, h - 220, 500));
+    }
+    const analysisActive = document.getElementById('page-analysis')?.classList.contains('active')
+      && !document.getElementById('page-game')?.classList.contains('active');
+    const reservedW = analysisActive ? 450 : 380;
+    const reservedH = analysisActive ? 175 : 210;
+    return Math.max(380, Math.min(780, w - reservedW, h - reservedH));
+  }
+
+  function applyBoardSize(px) {
+    const board = document.getElementById('chess-board');
+    if (!board) return;
+    const size = px >= 280 ? px : computeAutoSize();
+    board.style.width = size + 'px';
+    board.style.height = size + 'px';
+    // Размер координат масштабируется вместе с доской
+    board.style.setProperty('--sq-coord-fs', Math.max(9, Math.round(size / 46)) + 'px');
+
+    const area = board.closest('.board-area');
+    if (area && window.innerWidth > 768) {
+      area.querySelectorAll('.player-info').forEach(el => {
+        el.style.width = size + 'px';
+        el.style.minWidth = '0';
+      });
+    }
+  }
 
   function initSizeSlider() {
     const slider = document.getElementById('board-size-slider');
     const label  = document.getElementById('board-size-label');
-    if (!slider || slider._chInited) return;
-    slider._chInited = true;
-    slider.min = 280; slider.max = 800; slider.step = 10;
-    slider.value = _boardPx >= 280 ? _boardPx : 500;
-    if (label) label.textContent = _boardPx >= 280 ? _boardPx + 'px' : T('game.auto', 'Авто');
+    if (slider && !slider._chInited) {
+      slider._chInited = true;
+      slider.min = 280; slider.max = 860; slider.step = 10;
+      slider.value = _boardPx >= 280 ? _boardPx : computeAutoSize();
+      if (label) label.textContent = _boardPx >= 280 ? _boardPx + 'px' : T('game.auto', 'Авто');
 
-    // Обновляем fill-градиент трека
-    function updateSliderFill() {
-      const min = parseInt(slider.min), max = parseInt(slider.max);
-      const pct = ((parseInt(slider.value) - min) / (max - min) * 100).toFixed(1);
-      slider.style.setProperty('--pct', pct + '%');
+      const updateSliderFill = () => {
+        const min = parseInt(slider.min, 10), max = parseInt(slider.max, 10);
+        const pct = ((parseInt(slider.value, 10) - min) / (max - min) * 100).toFixed(1);
+        slider.style.setProperty('--pct', pct + '%');
+      };
+      updateSliderFill();
+
+      slider.addEventListener('input', () => {
+        if (label) label.textContent = slider.value + 'px';
+        applyBoardSize(parseInt(slider.value, 10));
+        updateSliderFill();
+      });
+      slider.addEventListener('change', () => {
+        _boardPx = parseInt(slider.value, 10);
+        localStorage.setItem('ch_board_size', _boardPx);
+        applyBoardSize(_boardPx);
+        updateSliderFill();
+      });
     }
-    updateSliderFill();
-
-    // input — обновляем лейбл и fill, доска НЕ двигается
-    slider.addEventListener('input', () => {
-      if (label) label.textContent = slider.value + 'px';
-      updateSliderFill();
-    });
-    // change — применяем когда отпустили ползунок
-    slider.addEventListener('change', () => {
-      _boardPx = parseInt(slider.value);
-      localStorage.setItem('ch_board_size', _boardPx);
-      render();
-      updateSliderFill();
-    });
-
-    // Ручка-растяжка в углу доски (как на lichess)
     initResizeHandle();
   }
 
   function initResizeHandle() {
-    const handle = document.getElementById('board-resize-handle');
-    if (!handle || handle._chInited) return;
+    const board = document.getElementById('chess-board');
+    const wrapper = board?.closest('.board-wrapper');
+    if (!wrapper) return;
+
+    let handle = wrapper.querySelector('#board-resize-handle');
+    if (!handle) {
+      handle = document.createElement('div');
+      handle.className = 'board-resize-handle';
+      handle.id = 'board-resize-handle';
+      handle.title = 'Тяните угол для размера · двойной клик — Авто';
+      wrapper.appendChild(handle);
+    }
+    if (handle._chInited) return;
     handle._chInited = true;
 
-    let startX, startY, startSize;
-
-    handle.addEventListener('mousedown', (e) => {
+    handle.addEventListener('dblclick', (e) => {
       e.preventDefault();
-      const board = getBoardEl();
-      startX = e.clientX;
-      startY = e.clientY;
-      startSize = board.offsetWidth;
+      _boardPx = 0;
+      localStorage.removeItem('ch_board_size');
+      const auto = computeAutoSize();
+      const slider = document.getElementById('board-size-slider');
+      const label  = document.getElementById('board-size-label');
+      if (slider) {
+        slider.value = auto;
+        const min = parseInt(slider.min, 10), max = parseInt(slider.max, 10);
+        slider.style.setProperty('--pct', ((auto - min) / (max - min) * 100).toFixed(1) + '%');
+      }
+      if (label) label.textContent = T('game.auto', 'Авто');
+      applyBoardSize(0);
+    });
 
-      function onMove(e) {
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        const delta = Math.round((dx + dy) / 2 / 10) * 10;
-        const newSize = Math.max(280, Math.min(800, startSize + delta));
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const b = getBoardEl();
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startSize = b.offsetWidth;
+
+      function onMove(ev) {
+        const dx = ev.clientX - startX;
+        const dy = ev.clientY - startY;
+        const delta = Math.round((dx + dy) / 2 / 5) * 5;
+        const newSize = Math.max(280, Math.min(860, startSize + delta));
         _boardPx = newSize;
 
-        // Синхронизируем ползунок
         const slider = document.getElementById('board-size-slider');
         const label  = document.getElementById('board-size-label');
         if (slider) {
           slider.value = newSize;
-          const min = parseInt(slider.min), max = parseInt(slider.max);
-          const pct = ((newSize - min) / (max - min) * 100).toFixed(1);
-          slider.style.setProperty('--pct', pct + '%');
+          const min = parseInt(slider.min, 10), max = parseInt(slider.max, 10);
+          slider.style.setProperty('--pct', ((newSize - min) / (max - min) * 100).toFixed(1) + '%');
         }
         if (label) label.textContent = newSize + 'px';
-
-        // Живой ресайз без полного re-render для скорости
-        const boardEl = getBoardEl();
-        boardEl.style.width = newSize + 'px';
-        boardEl.style.height = newSize + 'px';
+        applyBoardSize(newSize);
       }
 
       function onUp() {
         localStorage.setItem('ch_board_size', _boardPx);
-        render();
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
       }
 
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', onUp);
     });
   }
 
@@ -143,149 +194,488 @@ const chessBoard = (() => {
     }
 
     const analysisActive = document.getElementById('page-analysis')?.classList.contains('active');
-    // При реджойне page-analysis точно не active — но страхуемся явной проверкой
     const gameActive = document.getElementById('page-game')?.classList.contains('active');
     const containerId = (analysisActive && !gameActive) ? 'analysis-board-container' : 'game-board-container';
     const container = document.getElementById(containerId);
 
     if (container && board.parentElement !== container) {
-      container.appendChild(board);
-    }
-    if (!board.isConnected && container) {
-      container.appendChild(board);
+      const handle = container.querySelector('#board-resize-handle');
+      if (handle) container.insertBefore(board, handle);
+      else container.appendChild(board);
     }
 
-    const isDesktop = window.innerWidth > 768;
-    const boardSize = _boardPx >= 280
-      ? _boardPx + 'px'
-      : (isDesktop ? 'min(680px, calc(100vw - 400px))' : 'min(480px, calc(100vw - 24px))');
-
-    board.style.cssText = `
-      width: ${boardSize};
-      height: ${boardSize};
-      display: grid;
-      grid-template-columns: repeat(8, 1fr);
-      grid-template-rows: repeat(8, 1fr);
-      border: 3px solid var(--accent-dark);
-      border-radius: 4px;
-      overflow: hidden;
-      box-shadow: var(--shadow), 0 0 40px rgba(0,0,0,0.5);
-    `;
+    board.classList.add('ch-board');
+    applyBoardSize(_boardPx);
+    bindBoardEvents(board);
+    initResizeHandle();
 
     return board;
+  }
+
+  function getActiveState() {
+    return viewingMove >= 0 && viewingMove < historyStates.length
+      ? historyStates[viewingMove] : state;
+  }
+
+  function getSquareFromPoint(clientX, clientY) {
+    const board = document.getElementById('chess-board');
+    if (!board) return null;
+    const rect = board.getBoundingClientRect();
+    const left = rect.left + board.clientLeft;
+    const top  = rect.top  + board.clientTop;
+    const w = board.clientWidth;
+    const h = board.clientHeight;
+    if (clientX < left || clientX >= left + w || clientY < top || clientY >= top + h) {
+      return null;
+    }
+    const col = Math.min(7, Math.max(0, Math.floor((clientX - left) / (w / 8))));
+    const row = Math.min(7, Math.max(0, Math.floor((clientY - top)  / (h / 8))));
+    const r = isFlipped ? row : 7 - row;
+    const f = isFlipped ? 7 - col : col;
+    return r * 8 + f;
+  }
+
+  function ensureSquares(board) {
+    if (board._sqSlots && board._sqSlots.length === 64 && board._sqSlots[0].parentElement === board) {
+      return board._sqSlots;
+    }
+    board.querySelectorAll('.square').forEach(n => n.remove());
+    const slots = [];
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < 64; i++) {
+      const el = document.createElement('div');
+      el.className = 'square';
+      frag.appendChild(el);
+      slots.push(el);
+    }
+    board.prepend(frag);
+    board._sqSlots = slots;
+    return slots;
+  }
+
+  function isMovablePiece(piece, activeState) {
+    if (!piece) return false;
+    if (gameMode === 'online') return piece.color === playerColor;
+    return piece.color === activeState.turn;
+  }
+
+  // Завершение ПКМ-жеста: кружок/стрелка или очистка.
+  // Защита от двойной обработки: pointerup + запасной mouseup.
+  function finishRmbGesture(e) {
+    if (!rmbGestureActive) return;
+    rmbGestureActive = false;
+    window.removeEventListener('pointerup', onRmbPointerUp);
+    window.removeEventListener('mouseup', onRmbMouseUp);
+    window.removeEventListener('pointercancel', onRmbPointerCancel);
+
+    const board = document.getElementById('chess-board');
+    const endSq = getSquareFromPoint(e.clientX, e.clientY);
+    const color = e.shiftKey ? 'rgba(224,72,72,0.88)'
+      : e.altKey ? 'rgba(70,140,235,0.88)'
+      : 'rgba(21,184,58,0.88)';
+
+    if (rmbStartSq === null) {
+      if (premove) { clearPremove(); render(); }
+      else { annotations = []; renderAnnotationsSVG(board); }
+    } else if (endSq === null || endSq === rmbStartSq) {
+      if (premove) {
+        clearPremove();
+        selectedSq = null;
+        legalMovesCache = [];
+        render();
+      } else {
+        toggleCircle(rmbStartSq, color);
+        renderAnnotationsSVG(board);
+      }
+    } else {
+      if (premove) {
+        clearPremove();
+        selectedSq = null;
+        legalMovesCache = [];
+        render();
+      }
+      toggleArrow(rmbStartSq, endSq, color);
+      renderAnnotationsSVG(board);
+    }
+    rmbStartSq = null;
+  }
+
+  function onRmbPointerUp(e) {
+    if (e.button !== 2) return;
+    finishRmbGesture(e);
+  }
+
+  // Запасной путь: на некоторых платформах pointerup для ПКМ
+  // не долетает — жест завершаем по mouseup
+  function onRmbMouseUp(e) {
+    if (e.button !== 2) return;
+    finishRmbGesture(e);
+  }
+
+  function onRmbPointerCancel() {
+    rmbGestureActive = false;
+    window.removeEventListener('pointerup', onRmbPointerUp);
+    window.removeEventListener('mouseup', onRmbMouseUp);
+    window.removeEventListener('pointercancel', onRmbPointerCancel);
+    rmbStartSq = null;
+  }
+
+  function bindBoardEvents(board) {
+    if (board._chEventsBound) return;
+    board._chEventsBound = true;
+
+    board.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // Колёсико мыши листает ходы в режиме анализа
+    let lastWheel = 0;
+    board.addEventListener('wheel', (e) => {
+      if (gameMode !== 'analysis') return;
+      if (Math.abs(e.deltaY) < 8) return;
+      e.preventDefault();
+      const now = Date.now();
+      if (now - lastWheel < 65) return;
+      lastWheel = now;
+      if (e.deltaY > 0) gotoNext();
+      else gotoPrev();
+    }, { passive: false });
+
+    board.addEventListener('pointerdown', (e) => {
+      // ПКМ — кружки и стрелки (Ctrl+ЛКМ на Mac не трогаем — тоже для стрелок)
+      if (e.button === 2) {
+        e.preventDefault();
+        rmbStartSq = getSquareFromPoint(e.clientX, e.clientY);
+        rmbGestureActive = true;
+        window.addEventListener('pointerup', onRmbPointerUp);
+        window.addEventListener('mouseup', onRmbMouseUp);
+        window.addEventListener('pointercancel', onRmbPointerCancel);
+        return;
+      }
+      if (e.button !== 0) return;
+
+      if (annotations.length) {
+        clearAnnotations();
+        renderAnnotationsSVG(board);
+      }
+
+      const sq = getSquareFromPoint(e.clientX, e.clientY);
+      if (sq === null) return;
+
+      if (gameMode !== 'analysis' && viewingMove !== -1) return;
+
+      const activeState = getActiveState();
+      const piece = activeState.board[sq];
+      const isMyTurn = gameMode !== 'online' || activeState.turn === playerColor;
+
+      // Онлайн: не наш ход → планируем или снимаем преймув
+      if (gameMode === 'online' && !isMyTurn) {
+        if (selectedSq !== null && (!piece || piece.color !== playerColor)) {
+          if (sq !== selectedSq) setPremove(selectedSq, sq);
+          selectedSq = null;
+          legalMovesCache = [];
+          render();
+          return;
+        }
+        if (piece && piece.color === playerColor) {
+          startPointerDrag(e, sq, piece, activeState, false);
+        } else {
+          selectedSq = null;
+          legalMovesCache = [];
+          clearPremove();
+          render();
+        }
+        return;
+      }
+
+      // Уже выбрана фигура и нажали на допустимую цель (не на свою фигуру)
+      if (selectedSq !== null && sq !== selectedSq && !isMovablePiece(piece, activeState)) {
+        const move = legalMovesCache.find(m => m.to === sq);
+        if (move) {
+          attemptMove(selectedSq, sq, activeState);
+          return;
+        }
+        selectedSq = null;
+        legalMovesCache = [];
+        render();
+        return;
+      }
+
+      // Нажали на свою фигуру (начало клика или перетаскивания)
+      if (isMovablePiece(piece, activeState)) {
+        startPointerDrag(e, sq, piece, activeState, true);
+        return;
+      }
+
+      if (selectedSq !== null) {
+        selectedSq = null;
+        legalMovesCache = [];
+        render();
+      }
+    });
+  }
+
+  function startPointerDrag(e, sq, piece, activeState, calcLegal) {
+    e.preventDefault();
+    cleanupDrag();
+
+    const wasSelected = (selectedSq === sq);
+    clearPremove();
+    selectedSq = sq;
+    legalMovesCache = calcLegal ? ChessEngine.legalMoves(activeState, sq) : [];
+    render();
+
+    const board = document.getElementById('chess-board');
+    const sqSize = board ? board.clientWidth / 8 : 64;
+
+    dragState = {
+      fromSq: sq,
+      pieceKey: piece.color + piece.type,
+      startX: e.clientX,
+      startY: e.clientY,
+      sqSize,
+      active: false,
+      ghost: null,
+      wasSelected
+    };
+
+    window.addEventListener('pointermove', onPointerMove, { passive: false });
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerCancel);
+  }
+
+  function onPointerMove(e) {
+    if (!dragState) return;
+    const dx = e.clientX - dragState.startX;
+    const dy = e.clientY - dragState.startY;
+
+    if (!dragState.active && Math.hypot(dx, dy) >= 5) {
+      dragState.active = true;
+      const ghost = document.createElement('div');
+      ghost.className = 'piece-dragging';
+      ghost.style.cssText = `position:fixed;pointer-events:none;z-index:9999;transform:translate(-50%,-50%) scale(1.14);display:flex;align-items:center;justify-content:center;width:${dragState.sqSize}px;height:${dragState.sqSize}px;left:${e.clientX}px;top:${e.clientY}px;`;
+      const img = document.createElement('img');
+      img.src = PIECE_IMGS[dragState.pieceKey];
+      img.alt = dragState.pieceKey;
+      img.draggable = false;
+      img.style.cssText = 'width:90%;height:90%;object-fit:contain;filter:drop-shadow(0 10px 18px rgba(0,0,0,0.65));';
+      ghost.appendChild(img);
+      document.body.appendChild(ghost);
+      dragState.ghost = ghost;
+
+      const board = document.getElementById('chess-board');
+      const originSlot = board?.querySelector(`.square[data-sq="${dragState.fromSq}"]`);
+      if (originSlot) originSlot.classList.add('dragging-origin');
+    }
+
+    if (dragState.active && dragState.ghost) {
+      e.preventDefault();
+      dragState.ghost.style.left = e.clientX + 'px';
+      dragState.ghost.style.top  = e.clientY + 'px';
+
+      const newHover = getSquareFromPoint(e.clientX, e.clientY);
+      if (newHover !== hoverSq) {
+        const board = document.getElementById('chess-board');
+        if (board && hoverSq !== null) {
+          board.querySelector(`.square[data-sq="${hoverSq}"]`)?.classList.remove('drag-over');
+        }
+        hoverSq = newHover;
+        if (board && hoverSq !== null) {
+          board.querySelector(`.square[data-sq="${hoverSq}"]`)?.classList.add('drag-over');
+        }
+      }
+    }
+  }
+
+  function onPointerUp(e) {
+    if (!dragState || e.button !== 0) return;
+    const ds = dragState;
+    const targetSq = getSquareFromPoint(e.clientX, e.clientY);
+    cleanupDrag();
+
+    const activeState = getActiveState();
+    const isMyTurn = gameMode !== 'online' || activeState.turn === playerColor;
+
+    if (ds.active) {
+      if (targetSq !== null && targetSq !== ds.fromSq) {
+        if (gameMode === 'online' && !isMyTurn) {
+          setPremove(ds.fromSq, targetSq);
+          selectedSq = null;
+          legalMovesCache = [];
+          render();
+          return;
+        }
+        attemptMove(ds.fromSq, targetSq, activeState);
+      } else if (targetSq === ds.fromSq) {
+        selectedSq = ds.fromSq;
+        render();
+      } else {
+        selectedSq = null;
+        legalMovesCache = [];
+        render();
+      }
+    } else {
+      if (ds.wasSelected) {
+        selectedSq = null;
+        legalMovesCache = [];
+        render();
+      }
+    }
+  }
+
+  function onPointerCancel() {
+    if (!dragState) return;
+    cleanupDrag();
+    render();
+  }
+
+  function cleanupDrag() {
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerCancel);
+    if (dragState?.ghost) dragState.ghost.remove();
+    const board = document.getElementById('chess-board');
+    if (board) {
+      board.querySelectorAll('.dragging-origin').forEach(el => el.classList.remove('dragging-origin'));
+      board.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    }
+    dragState = null;
+    hoverSq = null;
+  }
+
+  function attemptMove(fromSq, toSq, activeState) {
+    const freshMoves = ChessEngine.legalMoves(activeState, fromSq);
+    const move = freshMoves.find(m => m.to === toSq);
+    if (!move) {
+      selectedSq = null;
+      legalMovesCache = [];
+      render();
+      return false;
+    }
+
+    if (move.promotion) {
+      const promotions = freshMoves.filter(m => m.to === toSq && m.promotion);
+      if (promotions.length > 1) {
+        showPromotionDialog(activeState.turn, (promo) => {
+          const pm = promotions.find(m => m.promotion === promo) || promotions[0];
+          executeMove(pm);
+        });
+        return true;
+      }
+    }
+    executeMove(move);
+    return true;
   }
 
   function render() {
     const board = getBoardEl();
     if (!board) return;
 
-    const displayState = viewingMove >= 0 && viewingMove < historyStates.length
-      ? historyStates[viewingMove] : state;
-
+    const displayState = getActiveState();
     const inCheckSq = findCheckSquare(displayState);
-    const squares = [];
-    const rowOrder  = isFlipped ? [0,1,2,3,4,5,6,7] : [7,6,5,4,3,2,1,0];
-    const fileOrder = isFlipped ? [7,6,5,4,3,2,1,0] : [0,1,2,3,4,5,6,7];
+    const slots = ensureSquares(board);
 
-    for (const r of rowOrder) {
-      for (const f of fileOrder) {
-        const sq    = r * 8 + f;
-        const light = (r + f) % 2 !== 0;
-        const piece = displayState.board[sq];
+    const showCoords = typeof getSettings === 'function' ? getSettings().coords !== false : true;
+    const showHints  = typeof getSettings === 'function' ? getSettings().hints  !== false : true;
+    const showAnim   = typeof getSettings === 'function' ? getSettings().animation !== false : true;
 
-        let classes = `square ${light ? 'light' : 'dark'}`;
-        if (sq === selectedSq) classes += ' selected';
-        if (lastMove && (sq === lastMove.from || sq === lastMove.to)) classes += ' last-move';
-        if (inCheckSq === sq) classes += ' in-check';
-        if (premoveSquares.includes(sq)) classes += ' premove';
-        const isLegal   = legalMovesCache.some(m => m.to === sq);
-        const isCapture = isLegal && (piece || displayState.enPassant === sq);
-        if (isLegal) classes += isCapture ? ' legal-capture' : ' legal-move';
-
-        const isFirstFile = isFlipped ? f === 7 : f === 0;
-        const isLastRank  = isFlipped ? r === 7 : r === 0;
-        const coordColor  = light ? 'var(--board-dark)' : 'var(--board-light)';
-        const showCoords  = typeof getSettings === 'function' ? getSettings().coords !== false : true;
-        const showHints   = typeof getSettings === 'function' ? getSettings().hints  !== false : true;
-
-        if (!showHints) {
-          classes = classes.replace(' legal-move', '').replace(' legal-capture', '');
-        }
-
-        squares.push(`<div class="${classes}" data-sq="${sq}"
-          onclick="chessBoard.handleClick(${sq})"
-          ondragover="event.preventDefault()"
-          ondrop="chessBoard.handleDrop(event,${sq})">
-          ${showCoords && isFirstFile ? `<span style="position:absolute;left:2px;top:2px;font-size:10px;font-weight:700;font-family:var(--font-mono);color:${coordColor};line-height:1;pointer-events:none">${r+1}</span>` : ''}
-          ${showCoords && isLastRank  ? `<span style="position:absolute;right:2px;bottom:1px;font-size:10px;font-weight:700;font-family:var(--font-mono);color:${coordColor};line-height:1;pointer-events:none">${String.fromCharCode(97+f)}</span>` : ''}
-          ${piece ? `<div class="piece" draggable="true"
-            ondragstart="chessBoard.handleDragStart(event,${sq})"
-            ondragend="chessBoard.handleDragEnd(event)">
-            <img src="${PIECE_IMGS[piece.color+piece.type]}" alt="${piece.color}${piece.type}" draggable="false">
-          </div>` : ''}
-        </div>`);
+    const legalSet   = new Set();
+    const captureSet = new Set();
+    if (showHints && legalMovesCache.length) {
+      for (const m of legalMovesCache) {
+        if (displayState.board[m.to] || m.enPassant) captureSet.add(m.to);
+        else legalSet.add(m.to);
       }
     }
-    board.innerHTML = squares.join('');
 
-    // SVG-оверлей для аннотаций (кружки/стрелки)
+    for (let i = 0; i < 64; i++) {
+      const rowIdx = Math.floor(i / 8);
+      const colIdx = i % 8;
+      const r = isFlipped ? rowIdx : 7 - rowIdx;
+      const f = isFlipped ? 7 - colIdx : colIdx;
+      const sq = r * 8 + f;
+      const light = (r + f) % 2 !== 0;
+      const piece = displayState.board[sq];
+      const slot = slots[i];
+
+      let cls = `square ${light ? 'light' : 'dark'}`;
+      if (sq === selectedSq) cls += ' selected';
+      if (lastMove && (sq === lastMove.from || sq === lastMove.to)) cls += ' last-move';
+      if (inCheckSq === sq) cls += ' in-check';
+      if (premoveSquares.includes(sq)) cls += ' premove';
+      if (captureSet.has(sq)) cls += ' legal-capture';
+      else if (legalSet.has(sq)) cls += ' legal-move';
+      if (dragState?.active && dragState.fromSq === sq) cls += ' dragging-origin';
+      if (hoverSq === sq) cls += ' drag-over';
+
+      if (slot.className !== cls) slot.className = cls;
+      if (slot.dataset.sq !== String(sq)) slot.dataset.sq = sq;
+
+      const coordColor = light ? 'var(--board-dark)' : 'var(--board-light)';
+      const wantRank = showCoords && colIdx === 0 ? String(r + 1) : '';
+      const wantFile = showCoords && rowIdx === 7 ? String.fromCharCode(97 + f) : '';
+      let rankEl = slot._rankEl;
+      if (wantRank) {
+        if (!rankEl) {
+          rankEl = document.createElement('span');
+          rankEl.className = 'sq-coord sq-coord-rank';
+          rankEl.style.cssText = 'position:absolute;left:4px;top:3px;font-family:var(--font-body);font-size:var(--sq-coord-fs,12px);font-weight:700;line-height:1;pointer-events:none;user-select:none;z-index:2;opacity:0.92;';
+          slot.appendChild(rankEl);
+          slot._rankEl = rankEl;
+        }
+        if (rankEl.textContent !== wantRank) rankEl.textContent = wantRank;
+        rankEl.style.color = coordColor;
+      } else if (rankEl) {
+        rankEl.remove();
+        slot._rankEl = null;
+      }
+
+      let fileEl = slot._fileEl;
+      if (wantFile) {
+        if (!fileEl) {
+          fileEl = document.createElement('span');
+          fileEl.className = 'sq-coord sq-coord-file';
+          // В правом нижнем углу доски буква прячется под ручкой ресайза —
+          // там ставим её в нижний левый угол клетки
+          const filePos = (rowIdx === 7 && colIdx === 7)
+            ? 'left:4px;bottom:2px;' : 'right:4px;bottom:2px;';
+          fileEl.style.cssText = 'position:absolute;' + filePos + 'font-family:var(--font-body);font-size:var(--sq-coord-fs,12px);font-weight:700;line-height:1;pointer-events:none;user-select:none;z-index:2;opacity:0.92;';
+          slot.appendChild(fileEl);
+          slot._fileEl = fileEl;
+        }
+        if (fileEl.textContent !== wantFile) fileEl.textContent = wantFile;
+        fileEl.style.color = coordColor;
+      } else if (fileEl) {
+        fileEl.remove();
+        slot._fileEl = null;
+      }
+
+      const pieceKey = piece ? (piece.color + piece.type) : '';
+      if (slot._pieceKey !== pieceKey) {
+        slot._pieceKey = pieceKey;
+        if (slot._pieceEl) {
+          slot._pieceEl.remove();
+          slot._pieceEl = null;
+        }
+        if (pieceKey) {
+          const pDiv = document.createElement('div');
+          pDiv.className = 'piece';
+          const img = document.createElement('img');
+          img.src = PIECE_IMGS[pieceKey];
+          img.alt = pieceKey;
+          img.draggable = false;
+          img.style.transition = showAnim ? 'transform 0.1s' : 'none';
+          pDiv.appendChild(img);
+          slot.appendChild(pDiv);
+          slot._pieceEl = pDiv;
+        }
+      } else if (slot._pieceEl?.firstChild) {
+        slot._pieceEl.firstChild.style.transition = showAnim ? 'transform 0.1s' : 'none';
+      }
+    }
+
     renderAnnotationsSVG(board);
-
-    // ПКМ: обработчики мыши на доске
-    board.oncontextmenu = (e) => e.preventDefault();
-    board.onmousedown = (e) => {
-      if (e.button !== 2) return;
-      e.preventDefault();
-      const sqEl = e.target.closest('[data-sq]');
-      rmbStartSq = sqEl ? parseInt(sqEl.dataset.sq) : null;
-    };
-    board.onmouseup = (e) => {
-      if (e.button !== 2) return;
-      e.preventDefault();
-      const sqEl = e.target.closest('[data-sq]');
-      const endSq = sqEl ? parseInt(sqEl.dataset.sq) : null;
-
-      if (rmbStartSq === null) {
-        // ПКМ не на клетке — очищаем всё
-        if (premove) { clearPremove(); render(); }
-        else { annotations = []; renderAnnotationsSVG(getBoardEl()); }
-        return;
-      }
-
-      if (endSq === null || endSq === rmbStartSq) {
-        // Клик на клетке — кружок или отмена преймува
-        if (premove) {
-          clearPremove();
-          selectedSq = null;
-          legalMovesCache = [];
-          render();
-        } else {
-          toggleCircle(rmbStartSq);
-          renderAnnotationsSVG(getBoardEl());
-        }
-      } else {
-        // Провели с клетки на клетку — стрелка
-        if (premove) {
-          clearPremove();
-          selectedSq = null;
-          legalMovesCache = [];
-          render();
-        }
-        toggleArrow(rmbStartSq, endSq);
-        renderAnnotationsSVG(getBoardEl());
-      }
-      rmbStartSq = null;
-    };
-
-    const showAnim = typeof getSettings === 'function' ? getSettings().animation !== false : true;
-    board.querySelectorAll('.piece img').forEach(img => {
-      img.style.transition = showAnim ? 'transform 0.1s' : 'none';
-    });
-
     renderMoveList();
     updateCapturedPieces(displayState);
 
-    // Показываем/скрываем индикатор преймува
     const pmIndicator = document.getElementById('premove-indicator');
     if (pmIndicator) {
       pmIndicator.classList.toggle('visible', premove !== null);
@@ -293,17 +683,27 @@ const chessBoard = (() => {
     document.dispatchEvent(new CustomEvent('board:render'));
   }
 
-  // АННОТАЦИИ: кружки и стрелки
-  function toggleCircle(sq) {
+  // АННОТАЦИИ: кружки и стрелки (viewBox 0..100 — надёжно во всех браузерах)
+  function toggleCircle(sq, color) {
+    const col = color || 'rgba(21,184,58,0.88)';
     const idx = annotations.findIndex(a => a.type === 'circle' && a.sq === sq);
-    if (idx >= 0) annotations.splice(idx, 1);
-    else annotations.push({ type: 'circle', sq });
+    if (idx >= 0) {
+      if (annotations[idx].color === col) annotations.splice(idx, 1);
+      else annotations[idx].color = col;
+    } else {
+      annotations.push({ type: 'circle', sq, color: col });
+    }
   }
 
-  function toggleArrow(from, to) {
+  function toggleArrow(from, to, color) {
+    const col = color || 'rgba(21,184,58,0.88)';
     const idx = annotations.findIndex(a => a.type === 'arrow' && a.from === from && a.to === to);
-    if (idx >= 0) annotations.splice(idx, 1);
-    else annotations.push({ type: 'arrow', from, to });
+    if (idx >= 0) {
+      if (annotations[idx].color === col) annotations.splice(idx, 1);
+      else annotations[idx].color = col;
+    } else {
+      annotations.push({ type: 'arrow', from, to, color: col });
+    }
   }
 
   function clearAnnotations() {
@@ -311,7 +711,6 @@ const chessBoard = (() => {
   }
 
   function sqToColRow(sq) {
-    // Возвращает { col, row } в координатах доски (0-based, с учётом флипа)
     const file = sq % 8;
     const rank = Math.floor(sq / 8);
     const col  = isFlipped ? 7 - file : file;
@@ -325,31 +724,23 @@ const chessBoard = (() => {
     if (!svg) {
       svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
       svg.setAttribute('class', 'board-annotations-svg');
-      svg.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10;overflow:visible';
+      svg.setAttribute('viewBox', '0 0 100 100');
+      svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:10;overflow:visible';
       board.style.position = 'relative';
       board.appendChild(svg);
     }
 
     if (!annotations.length) { svg.innerHTML = ''; return; }
 
-    const N = 8;
-    const cell = 100 / N; // % единицы
-
-    // Arrowhead marker
-    let defs = `<defs>
-      <marker id="arrowhead" markerWidth="4" markerHeight="4" refX="2.5" refY="2" orient="auto">
-        <polygon points="0 0, 4 2, 0 4" fill="rgba(15,188,0,0.85)"/>
-      </marker>
-    </defs>`;
-
+    const cell = 12.5; // 100 / 8
     let shapes = '';
     for (const ann of annotations) {
+      const col = ann.color || 'rgba(21,184,58,0.88)';
       if (ann.type === 'circle') {
-        const { col, row } = sqToColRow(ann.sq);
-        const cx = (col + 0.5) * cell;
-        const cy = (row + 0.5) * cell;
-        const r  = cell * 0.44;
-        shapes += `<circle cx="${cx}%" cy="${cy}%" r="${r}%" fill="none" stroke="rgba(15,188,0,0.85)" stroke-width="${cell * 0.09}%" />`;
+        const p = sqToColRow(ann.sq);
+        const cx = (p.col + 0.5) * cell;
+        const cy = (p.row + 0.5) * cell;
+        shapes += `<circle cx="${cx}" cy="${cy}" r="5.45" fill="none" stroke="${col}" stroke-width="1.05" />`;
       } else if (ann.type === 'arrow') {
         const f = sqToColRow(ann.from);
         const t = sqToColRow(ann.to);
@@ -358,20 +749,18 @@ const chessBoard = (() => {
         const x2 = (t.col + 0.5) * cell;
         const y2 = (t.row + 0.5) * cell;
 
-        // Укорачиваем линию чуть-чуть у конца чтобы стрелочка выглядела красиво
-        const dx = x2 - x1, dy = y2 - y1;
-        const len = Math.sqrt(dx*dx + dy*dy);
-        const shorten = cell * 0.35;
-        const ex = x2 - (dx / len) * shorten;
-        const ey = y2 - (dy / len) * shorten;
+        const a = Math.atan2(y2 - y1, x2 - x1);
+        const sx = x1 + Math.cos(a) * 2.2;
+        const sy = y1 + Math.sin(a) * 2.2;
+        const ex = x2 - Math.cos(a) * 4.2;
+        const ey = y2 - Math.sin(a) * 4.2;
+        const w = 2.6;
 
-        shapes += `<line x1="${x1}%" y1="${y1}%" x2="${ex}%" y2="${ey}%"
-          stroke="rgba(15,188,0,0.85)" stroke-width="${cell * 0.18}%"
-          stroke-linecap="round"
-          marker-end="url(#arrowhead)" />`;
+        shapes += `<line x1="${sx}" y1="${sy}" x2="${ex}" y2="${ey}" stroke="${col}" stroke-width="2.1" stroke-linecap="round"/>`
+          + `<polygon fill="${col}" points="${x2},${y2} ${ex - Math.sin(a) * w},${ey + Math.cos(a) * w} ${ex + Math.sin(a) * w},${ey - Math.cos(a) * w}"/>`;
       }
     }
-    svg.innerHTML = defs + shapes;
+    svg.innerHTML = shapes;
   }
 
   function findCheckSquare(st) {
@@ -380,78 +769,30 @@ const chessBoard = (() => {
     return ChessEngine.isAttacked(st, kingSq, ChessEngine.opposite(st.turn)) ? kingSq : null;
   }
 
-  // КЛИК ПО КЛЕТКЕ
+  // Обратная совместимость
   function handleClick(sq) {
-    if (viewingMove !== -1) return;
-    clearAnnotations(); // ЛКМ сбрасывает все аннотации
-
-    const piece = state.board[sq];
-    const isMyTurn = gameMode !== 'online' || state.turn === playerColor;
-
-    // ОНЛАЙН: не наш ход → устанавливаем преймув
-    if (gameMode === 'online' && !isMyTurn) {
-      if (selectedSq === null) {
-        // Выбираем свою фигуру для преймува
-        if (!piece || piece.color !== playerColor) return;
-        selectedSq = sq;
-        legalMovesCache = []; // Не показываем легальные ходы (мы не знаем, что будет)
-        render();
-        return;
-      }
-      if (sq === selectedSq) {
-        selectedSq = null; clearPremove(); render(); return;
-      }
-      // Выбираем другую свою фигуру
-      if (piece && piece.color === playerColor) {
-        selectedSq = sq; legalMovesCache = []; render(); return;
-      }
-      // Устанавливаем преймув на клетку назначения
-      if (selectedSq !== null) {
-        setPremove(selectedSq, sq);
-        selectedSq = null; legalMovesCache = [];
-        render();
-      }
-      return;
-    }
-
+    if (gameMode !== 'analysis' && viewingMove !== -1) return;
+    const activeState = getActiveState();
+    const piece = activeState.board[sq];
     if (selectedSq === null) {
-      if (!piece) return;
-      if (gameMode === 'online' && piece.color !== playerColor) return;
-      if (piece.color !== state.turn) return;
-      clearPremove();
+      if (!isMovablePiece(piece, activeState)) return;
       selectedSq = sq;
-      legalMovesCache = ChessEngine.legalMoves(state, sq);
+      legalMovesCache = ChessEngine.legalMoves(activeState, sq);
       render();
       return;
     }
-
-    if (sq === selectedSq) {
-      selectedSq = null; legalMovesCache = [];
-      render(); return;
-    }
-
-    if (piece && piece.color === state.turn && (gameMode !== 'online' || piece.color === playerColor)) {
+    if (sq === selectedSq) { selectedSq = null; legalMovesCache = []; render(); return; }
+    if (isMovablePiece(piece, activeState)) {
       selectedSq = sq;
-      legalMovesCache = ChessEngine.legalMoves(state, sq);
-      render(); return;
+      legalMovesCache = ChessEngine.legalMoves(activeState, sq);
+      render();
+      return;
     }
-
-    const move = legalMovesCache.find(m => m.to === sq);
-    if (!move) { selectedSq = null; legalMovesCache = []; render(); return; }
-
-    if (move.promotion) {
-      const promotions = legalMovesCache.filter(m => m.to === sq && m.promotion);
-      if (promotions.length > 1) {
-        showPromotionDialog(state.turn, (promo) => {
-          const pm = promotions.find(m => m.promotion === promo) || promotions[0];
-          executeMove(pm);
-        });
-        return;
-      }
-    }
-
-    executeMove(move);
+    attemptMove(selectedSq, sq, activeState);
   }
+  function handleDragStart() {}
+  function handleDragEnd() {}
+  function handleDrop() {}
 
   function setPremove(from, to, promotion) {
     premove = { from, to, promotion: promotion || null };
@@ -464,12 +805,22 @@ const chessBoard = (() => {
   }
 
   function executeMove(move) {
+    if (gameMode === 'analysis' && viewingMove >= 0 && viewingMove < historyStates.length - 1) {
+      const fullHist = state.history || [];
+      state = ChessEngine.deepClone(historyStates[viewingMove]);
+      if (!Array.isArray(state.history)) {
+        state.history = fullHist.slice(0, viewingMove);
+      }
+      historyStates = historyStates.slice(0, viewingMove + 1);
+      viewingMove = -1;
+    }
+
     const san = ChessEngine.toSAN(state, move);
     const prevState = ChessEngine.deepClone(state);
     state = ChessEngine.applyMove(state, move);
-    state.history = [...prevState.history, { ...move, san, fen: ChessEngine.toFEN(state) }];
-    state.capturedWhite = [...prevState.capturedWhite, ...(state.capturedWhite.slice(prevState.capturedWhite.length))];
-    state.capturedBlack = [...prevState.capturedBlack, ...(state.capturedBlack.slice(prevState.capturedBlack.length))];
+    state.history = [...(prevState.history || []), { ...move, san, fen: ChessEngine.toFEN(state) }];
+    state.capturedWhite = [...(prevState.capturedWhite || []), ...(state.capturedWhite.slice((prevState.capturedWhite || []).length))];
+    state.capturedBlack = [...(prevState.capturedBlack || []), ...(state.capturedBlack.slice((prevState.capturedBlack || []).length))];
 
     historyStates.push(ChessEngine.deepClone(state));
     viewingMove = -1;
@@ -497,7 +848,6 @@ const chessBoard = (() => {
   }
 
   function applyOpponentMove(move, serverWhiteTime, serverBlackTime) {
-    // Синхронизируем время с сервером (авторитетный источник)
     if (serverWhiteTime !== undefined && serverBlackTime !== undefined) {
       whiteTime = serverWhiteTime;
       blackTime = serverBlackTime;
@@ -506,7 +856,7 @@ const chessBoard = (() => {
     const san = ChessEngine.toSAN(state, move);
     const prevState = ChessEngine.deepClone(state);
     state = ChessEngine.applyMove(state, move);
-    state.history = [...prevState.history, { ...move, san, fen: ChessEngine.toFEN(state) }];
+    state.history = [...(prevState.history || []), { ...move, san, fen: ChessEngine.toFEN(state) }];
     historyStates.push(ChessEngine.deepClone(state));
     viewingMove = -1;
     lastMove = move;
@@ -514,13 +864,13 @@ const chessBoard = (() => {
     checkGameStatus();
     tickClock();
 
-    // Выполняем преймув если был запланирован
     if (premove && gameMode === 'online') {
       const pm = premove;
       clearPremove();
-      // Проверяем легальность преймува в новой позиции
       const legalPremoves = ChessEngine.legalMoves(state, pm.from);
-      const legalPm = legalPremoves.find(m => m.to === pm.to && (!pm.promotion || m.promotion === pm.promotion));
+      const promoPref = pm.promotion || 'Q';
+      const legalPm = legalPremoves.find(m => m.to === pm.to && (!m.promotion || m.promotion === promoPref))
+        || legalPremoves.find(m => m.to === pm.to);
       if (legalPm && state.board[pm.from]?.color === playerColor) {
         setTimeout(() => executeMove(legalPm), 50);
       }
@@ -529,9 +879,6 @@ const chessBoard = (() => {
     render();
   }
 
-  // Локализованные подписи причин ничьей — используются и в мгновенном локальном
-  // окне результата (checkGameStatus), и в подтверждённом сервером
-  // результате (onGameEnded), чтобы текст совпадал в обоих случаях.
   const DRAW_REASON_KEYS = {
     'stalemate':             'game.draw_stalemate',
     'fifty-move':            'game.draw_fifty',
@@ -570,83 +917,12 @@ const chessBoard = (() => {
     } else if (status.status === 'draw') {
       setTimeout(() => {
         showGameResult(T('game.draw', 'Ничья'), drawReasonText(status.reason));
-        // То же самое для 50 ходов / недостатка материала / троекратного
         if (gameMode === 'online' && socket) {
           socket.emit('game_over', { gameId, result: 'draw', reason: status.reason });
         }
         stopClock();
       }, 100);
     }
-  }
-
-  // DRAG & DROP
-  let dragFromSq = null;
-
-  function handleDragStart(e, sq) {
-    const piece = state.board[sq];
-    if (!piece) { e.preventDefault(); return; }
-    if (gameMode === 'online' && piece.color !== playerColor) { e.preventDefault(); return; }
-    if (viewingMove !== -1) { e.preventDefault(); return; }
-    // Разрешаем drag во время чужого хода для преймува
-    if (piece.color !== state.turn && !(gameMode === 'online' && piece.color === playerColor)) {
-      e.preventDefault(); return;
-    }
-    dragFromSq = sq;
-    selectedSq = sq;
-    clearAnnotations();
-    if (gameMode === 'online' && state.turn !== playerColor) {
-      legalMovesCache = []; // Преймув — легальность проверим потом
-    } else {
-      legalMovesCache = ChessEngine.legalMoves(state, sq);
-    }
-    e.dataTransfer.setData('text/plain', sq);
-    e.dataTransfer.effectAllowed = 'move';
-    setTimeout(() => render(), 0);
-  }
-
-  function handleDragEnd(e) {
-    // Сбрасываем dragFromSq только если drop не был обработан
-    // (dragFromSq уже null если handleDrop отработал)
-    dragFromSq = null;
-  }
-
-  function handleDrop(e, sq) {
-    e.preventDefault();
-    // dragFromSq мог быть уже сброшен handleDragEnd в некоторых браузерах —
-    // читаем из dataTransfer как запасной вариант
-    const from = dragFromSq !== null ? dragFromSq : parseInt(e.dataTransfer.getData('text/plain'));
-    dragFromSq = null;
-    if (isNaN(from) || from === sq) { selectedSq = null; legalMovesCache = []; render(); return; }
-
-    // Преймув: наш drag во время чужого хода
-    if (gameMode === 'online' && state.turn !== playerColor) {
-      const piece = state.board[from];
-      if (piece && piece.color === playerColor) {
-        setPremove(from, sq);
-        selectedSq = null; legalMovesCache = [];
-        render();
-      }
-      return;
-    }
-
-    // Пересчитываем легальные ходы прямо здесь — не доверяем кэшу
-    // (кэш мог устареть если между dragStart и drop что-то его перезаписало)
-    const freshMoves = ChessEngine.legalMoves(state, from);
-    const move = freshMoves.find(m => m.to === sq);
-    if (!move) { selectedSq = null; legalMovesCache = []; render(); return; }
-
-    legalMovesCache = freshMoves; // синхронизируем кэш
-    if (move.promotion) {
-      const promotions = freshMoves.filter(m => m.to === sq && m.promotion);
-      if (promotions.length > 1) {
-        showPromotionDialog(state.turn, (promo) => {
-          const pm = promotions.find(m => m.promotion === promo) || promotions[0];
-          executeMove(pm);
-        });
-        return;
-      }
-    }
-    executeMove(move);
   }
 
   // ПРЕВРАЩЕНИЕ
@@ -668,56 +944,58 @@ const chessBoard = (() => {
   function renderMoveList() {
     const table = document.getElementById('moves-table-body');
     if (!table) return;
-    const moves = state.history;
+    const moves = state.history || [];
     let html = '';
     for (let i = 0; i < moves.length; i += 2) {
       const wMove = moves[i];
-      const bMove = moves[i+1];
+      const bMove = moves[i + 1];
       const wIdx = i;
-      const bIdx = i+1;
-      const wCurrent = viewingMove === wIdx || (viewingMove === -1 && wIdx === moves.length - 1 && !bMove);
-      const bCurrent = viewingMove === bIdx || (viewingMove === -1 && bIdx === moves.length - 1);
+      const bIdx = i + 1;
+      const curStateIdx = viewingMove === -1 ? historyStates.length - 1 : viewingMove;
+      const wCurrent = curStateIdx === wIdx + 1;
+      const bCurrent = bMove && curStateIdx === bIdx + 1;
       html += `<tr>
-        <td>${Math.floor(i/2)+1}.</td>
-        <td class="move-cell ${wCurrent ? 'current' : ''}" onclick="chessBoard.gotoMove(${wIdx+1})">${wMove.san}</td>
-        <td class="move-cell ${bCurrent ? 'current' : ''}" onclick="chessBoard.gotoMove(${bIdx+1})">${bMove ? bMove.san : ''}</td>
+        <td>${Math.floor(i / 2) + 1}.</td>
+        <td class="move-cell ${wCurrent ? 'current' : ''}" data-ply="${wIdx + 1}" onclick="chessBoard.gotoMove(${wIdx + 1})">${wMove.san}</td>
+        <td class="move-cell ${bCurrent ? 'current' : ''}" data-ply="${bMove ? bIdx + 1 : ''}" ${bMove ? `onclick="chessBoard.gotoMove(${bIdx + 1})"` : ''}>${bMove ? bMove.san : ''}</td>
       </tr>`;
     }
     table.innerHTML = html;
-    const movesDiv = table.closest('.moves-list');
-    if (movesDiv) movesDiv.scrollTop = movesDiv.scrollHeight;
+    const curCell = table.querySelector('.move-cell.current');
+    if (curCell) {
+      curCell.scrollIntoView({ block: 'nearest' });
+    } else {
+      const movesDiv = table.closest('.moves-list');
+      if (movesDiv) movesDiv.scrollTop = movesDiv.scrollHeight;
+    }
   }
 
   function gotoMove(idx) {
-    if (idx >= historyStates.length) { viewingMove = -1; }
-    else { viewingMove = idx; }
+    selectedSq = null;
+    legalMovesCache = [];
+    if (idx >= historyStates.length - 1) { viewingMove = -1; }
+    else { viewingMove = Math.max(0, idx); }
+    const active = getActiveState();
+    const hist = active.history || [];
+    lastMove = hist.length ? hist[hist.length - 1] : null;
     render();
   }
 
-  function gotoFirst() { viewingMove = 0; render(); }
+  function gotoFirst() { gotoMove(0); }
   function gotoPrev() {
     const cur = viewingMove === -1 ? historyStates.length - 1 : viewingMove;
-    viewingMove = Math.max(0, cur - 1);
-    render();
+    gotoMove(Math.max(0, cur - 1));
   }
   function gotoNext() {
     const cur = viewingMove === -1 ? historyStates.length - 1 : viewingMove;
-    const next = cur + 1;
-    if (next >= historyStates.length) { viewingMove = -1; }
-    else { viewingMove = next; }
-    render();
+    gotoMove(cur + 1);
   }
-  function gotoLast() { viewingMove = -1; render(); }
+  function gotoLast() { gotoMove(historyStates.length - 1); }
 
   // CLOCK
   let tcIncrement = 0;
-  // Храним точку отсчёта Date.now() чтобы не зависеть от дрейфа setInterval.
-  // whiteTime/blackTime — «зафиксированное» время на момент clockTickAt.
-  // Реальное отображаемое время = сохранённое - (now - clockTickAt) для activeColor.
-  let clockTickAt = null; // Date.now() в момент последнего tickClock() / syncClock
+  let clockTickAt = null;
 
-  // opts.autoStart  — сразу запустить отсчёт (используется при реджойне в
-  // уже идущей партии, когда ходы на сервере есть).
   function startClock(wTime, bTime, tc, opts) {
     const parsed = parseTC(tc || '10+0');
     whiteTime = wTime !== undefined ? wTime : parsed[0] * 60;
@@ -729,8 +1007,6 @@ const chessBoard = (() => {
     clearInterval(clockInterval);
 
     if (opts && opts.autoStart) {
-      // Реджойн в уже идущую партию: серверный liveClock уже тикает —
-      // мгновенно включаем локальный отсчёт. Для НОВОЙ партии autoStart
       clockRunning = true;
       clockTickAt = Date.now();
       clockInterval = setInterval(clockTick_interval, 100);
@@ -740,29 +1016,23 @@ const chessBoard = (() => {
 
   function tickClock() {
     const now = Date.now();
-    // Кто только что сделал ход (противоположный state.turn, т.к. ход уже применён)
     const justMoved = state.turn === 'w' ? 'b' : 'w';
 
     if (clockRunning && clockTickAt !== null) {
-      // Фиксируем точное время, которое потратил тот кто ходил
       const elapsed = (now - clockTickAt) / 1000;
       if (justMoved === 'w') whiteTime = Math.max(0, whiteTime - elapsed);
       else                    blackTime = Math.max(0, blackTime - elapsed);
     }
 
-    // Инкремент — добавляем тому, кто только что сходил
     if (clockRunning && tcIncrement > 0) {
       if (justMoved === 'w') whiteTime = whiteTime + tcIncrement;
       else blackTime += tcIncrement;
     }
 
     activeColor = state.turn;
-    clockTickAt = now; // сброс точки отсчёта для нового хода
+    clockTickAt = now;
 
     if (!clockRunning) {
-      // Часы стартуют после первого ответного хода чёрных (со 2-го полного хода):
-      // оба первых полухода защищены серверным дедлайном, основные часы у
-      // сервера в это время стоят — клиент не должен от них отрываться.
       const totalMoves = state.history ? state.history.length : 0;
       if (totalMoves >= 2) {
         clockRunning = true;
@@ -773,14 +1043,10 @@ const chessBoard = (() => {
     updateClockDisplay();
   }
 
-  // Вызывается каждые 100мс — только для обновления дисплея и проверки флага
   function clockTick_interval() {
     if (!clockRunning || clockTickAt === null) return;
-
-    const now     = Date.now();
+    const now = Date.now();
     const elapsed = (now - clockTickAt) / 1000;
-
-    // Отображаемое время: зафиксированное - прошедшее с последнего хода
     const displayWhite = activeColor === 'w' ? Math.max(0, whiteTime - elapsed) : whiteTime;
     const displayBlack = activeColor === 'b' ? Math.max(0, blackTime - elapsed) : blackTime;
 
@@ -794,7 +1060,6 @@ const chessBoard = (() => {
   }
 
   function stopClock() {
-    // Фиксируем точное оставшееся время перед остановкой
     if (clockRunning && clockTickAt !== null) {
       const elapsed = (Date.now() - clockTickAt) / 1000;
       if (activeColor === 'w') whiteTime = Math.max(0, whiteTime - elapsed);
@@ -806,7 +1071,6 @@ const chessBoard = (() => {
     updateClockDisplay();
   }
 
-  // Синхронизация с сервером — вызывается после move_confirmed (наш ход принят)
   function syncClockFromServer(serverWhite, serverBlack) {
     if (serverWhite === undefined || serverBlack === undefined) return;
     whiteTime = serverWhite;
@@ -832,16 +1096,10 @@ const chessBoard = (() => {
   }
 
   function updateClockDisplayValues(wTime, bTime) {
-    // bottomEl — ВСЕГДА наш игрок (playerColor)
-    // topEl    — ВСЕГДА соперник
     const bottomEl = document.getElementById('clock-white');
     const topEl    = document.getElementById('clock-black');
-
-    // Используем переданные значения (уже с учётом прошедшего времени)
     const myTime    = playerColor === 'w' ? wTime : bTime;
     const theirTime = playerColor === 'w' ? bTime : wTime;
-
-    // Наш ход = activeColor совпадает с нашим цветом
     const myTurn = activeColor === playerColor;
 
     if (bottomEl) {
@@ -854,10 +1112,7 @@ const chessBoard = (() => {
     }
   }
 
-  // Форматирование ШАХМАТНЫХ ЧАСОВ (секунды → «m:ss»). Переименовано из
-  // сообщений (таймстамп → «ЧЧ:ММ»), это — про время партии на часах.
   function formatClock(sec) {
-    // Округляем вниз — время дробное (float) после точного отсчёта
     const totalSec = Math.max(0, Math.floor(sec));
     const m = Math.floor(totalSec / 60);
     const s = totalSec % 60;
@@ -865,12 +1120,6 @@ const chessBoard = (() => {
   }
 
   // ЗВУКИ
-  // prevState — позиция ДО применения хода: раньше взятие определялось
-  // ПОСЛЕ applyMove, когда board[move.to] уже занят двинувшейся фигурой,
-  // поэтому звук «взятия» играл на КАЖДОМ ходу, а тихий ход и рокировка
-  // были недостижимы.
-  // Один AudioContext на партию: браузеры жёстко лимитируют их число,
-  // новый контекст на каждый ход приводил к внезапному пропаданию звука.
   let _soundCtx = null;
   function playSound(move, prevState) {
     const settings = typeof getSettings === 'function' ? getSettings() : { sounds: true };
@@ -886,13 +1135,7 @@ const chessBoard = (() => {
     gain.gain.setValueAtTime(0.1, ctx.currentTime);
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
     const wasCapture = move.enPassant || (prevState ? prevState.board[move.to] !== null : false);
-    if (wasCapture) {
-      osc.frequency.value = 300;
-    } else if (move.castle) {
-      osc.frequency.value = 500;
-    } else {
-      osc.frequency.value = 440;
-    }
+    osc.frequency.value = wasCapture ? 300 : move.castle ? 500 : 440;
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.15);
   }
@@ -958,8 +1201,10 @@ const chessBoard = (() => {
 
     for (const move of (data.moves || [])) {
       try {
+        const san = ChessEngine.toSAN(state, move);
         const newState = ChessEngine.applyMove(state, move);
         if (newState) {
+          newState.history = [...(state.history || []), { ...move, san, fen: ChessEngine.toFEN(newState) }];
           state = newState;
           historyStates.push(ChessEngine.deepClone(state));
           lastMove = move;
@@ -1003,12 +1248,13 @@ const chessBoard = (() => {
 
     clearChatMessages();
 
-    // Восстановление уже сыгранных ходов (при реджойне после перезагрузки)
     if (data.moves && data.moves.length > 0) {
       for (const move of data.moves) {
         try {
+          const san = ChessEngine.toSAN(state, move);
           const newState = ChessEngine.applyMove(state, move);
           if (newState) {
+            newState.history = [...(state.history || []), { ...move, san, fen: ChessEngine.toFEN(newState) }];
             state = newState;
             historyStates.push(ChessEngine.deepClone(state));
             lastMove = move;
@@ -1017,16 +1263,13 @@ const chessBoard = (() => {
       }
       viewingMove = -1;
 
-      // Восстанавливаем время — берём с сервера если есть, иначе пересчитываем по ходам
       const [min, inc] = parseTC(data.timeControl || '10+0');
       const totalSec = min * 60;
       if (data.whiteTime !== undefined && data.blackTime !== undefined) {
-        // Сервер передал реальное оставшееся время
         whiteTime = data.whiteTime;
         blackTime = data.blackTime;
         tcIncrement = inc || 0;
       } else {
-        // Fallback: приблизительно вычитаем по 5 сек за ход (грубо)
         const movesW = Math.ceil(data.moves.length / 2);
         const movesB = Math.floor(data.moves.length / 2);
         whiteTime = Math.max(10, totalSec - movesW * 5);
@@ -1035,10 +1278,9 @@ const chessBoard = (() => {
       }
       activeColor = state.turn;
       clockTickAt = Date.now();
-      clockRunning = false; // сначала false, запустим через startClock-like ниже
+      clockRunning = false;
       clearInterval(clockInterval);
       updateClockDisplay();
-      // Запускаем тикер
       clockRunning = true;
       clockInterval = setInterval(clockTick_interval, 100);
     } else {
@@ -1049,11 +1291,9 @@ const chessBoard = (() => {
     }
 
     render();
-    // Восстанавливаем чат после реджойна (только если есть ходы = это реджойн)
     if (data.moves && data.moves.length > 0) {
       setTimeout(restoreChatFromSession, 150);
     }
-    // Инициализируем слайдер размера (нужно при старте онлайн-игры — showPage('game') не вызывается)
     setTimeout(() => initSizeSlider(), 50);
   }
 
@@ -1088,7 +1328,6 @@ const chessBoard = (() => {
   function clearChatMessages() {
     const el = document.getElementById('chat-messages');
     if (el) el.innerHTML = '';
-    // Чистим сохранённый чат для этой игры
     try { if (gameId) sessionStorage.removeItem('ch_game_chat_' + gameId); } catch {}
   }
 
@@ -1121,7 +1360,8 @@ const chessBoard = (() => {
 
   function updateCapturedPieces(st) {
     const ORDER = ['Q','R','B','N','P'];
-    const renderCap = (pieces) => pieces
+    const renderCap = (pieces) => (pieces || [])
+      .slice()
       .sort((a,b) => ORDER.indexOf(a.type) - ORDER.indexOf(b.type))
       .map(p => `<img src="${PIECE_IMGS[p.color+p.type]}" style="width:20px;height:20px">`)
       .join('');
@@ -1151,21 +1391,19 @@ const chessBoard = (() => {
       historyStates = [ChessEngine.deepClone(state)];
       viewingMove = -1; lastMove = null;
       selectedSq = null; legalMovesCache = [];
-      // Позиция сменилась вручную — прошлая оценка ни к чему не привязана
       if (typeof AICommentator !== 'undefined') AICommentator.reset();
       render();
       if (gameMode === 'analysis' && typeof requestAnalysis === 'function') requestAnalysis();
     } catch (e) { toast('Неверный FEN', 'error'); }
   }
 
-  // Загружает партию по массиву ходов (для анализа из профиля/модалки результата)
   function loadGameMoves(moves) {
     state = ChessEngine.parseFEN(ChessEngine.START_FEN);
     historyStates = [ChessEngine.deepClone(state)];
     viewingMove = -1; lastMove = null;
     selectedSq = null; legalMovesCache = [];
     gameMode = 'analysis';
-    gameId = null; // режим анализа всегда локальный (иначе pages['game'] не пересоздаст партию)
+    gameId = null;
     isFlipped = false;
     stopClock();
     if (typeof AICommentator !== 'undefined') AICommentator.reset();
@@ -1175,24 +1413,29 @@ const chessBoard = (() => {
         const san = ChessEngine.toSAN(state, move);
         const newState = ChessEngine.applyMove(state, move);
         if (!newState) break;
+        newState.history = [...(state.history || []), { ...move, san, fen: ChessEngine.toFEN(newState) }];
         state = newState;
-        state.history = [...(state.history || []), { ...move, san, fen: ChessEngine.toFEN(state) }];
         historyStates.push(ChessEngine.deepClone(state));
         lastMove = move;
       } catch(e) { console.warn('loadGameMoves error', e); break; }
     }
 
-    // Встаём на начало для просмотра
     viewingMove = 0;
+    lastMove = null;
     render();
-    // Анализируем — безопасно, requestAnalysis может быть не определена
     if (typeof requestAnalysis === 'function') requestAnalysis();
   }
 
   function getFEN() { return ChessEngine.toFEN(state); }
 
-  // KEYBOARD NAVIGATION
+  let _resizeRaf = 0;
+  window.addEventListener('resize', () => {
+    cancelAnimationFrame(_resizeRaf);
+    _resizeRaf = requestAnimationFrame(() => applyBoardSize(_boardPx));
+  }, { passive: true });
+
   document.addEventListener('keydown', (e) => {
+    if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
     const isGamePage = document.getElementById('page-game')?.classList.contains('active')
       || document.getElementById('page-analysis')?.classList.contains('active');
     if (!isGamePage) return;
@@ -1217,7 +1460,7 @@ const chessBoard = (() => {
     loadFEN,
     loadGameMoves,
     getFEN,
-    getViewFEN: () => ChessEngine.toFEN(viewingMove >= 0 && viewingMove < historyStates.length ? historyStates[viewingMove] : state),
+    getViewFEN: () => ChessEngine.toFEN(getActiveState()),
     getFENs: () => historyStates.map(s => ChessEngine.toFEN(s)),
     get viewIndex() { return viewingMove >= 0 && viewingMove < historyStates.length ? viewingMove : historyStates.length - 1; },
     get flipped() { return isFlipped; },
@@ -1233,6 +1476,18 @@ const chessBoard = (() => {
     onGameEnded,
     initSizeSlider,
     initResizeHandle,
+    playUCI: (uci) => {
+      if (!uci || uci.length < 4) return false;
+      const from = uci.charCodeAt(0) - 97 + (parseInt(uci[1], 10) - 1) * 8;
+      const to   = uci.charCodeAt(2) - 97 + (parseInt(uci[3], 10) - 1) * 8;
+      const promo = uci[4] ? uci[4].toUpperCase() : null;
+      const active = getActiveState();
+      const moves = ChessEngine.legalMoves(active, from).filter(m => m.to === to);
+      const m = (promo && moves.find(x => x.promotion === promo)) || moves[0];
+      if (!m) return false;
+      executeMove(m);
+      return true;
+    },
     get gameId()       { return gameId; },
     get tournamentId() { return _tournamentId; },
     get state()        { return state; },

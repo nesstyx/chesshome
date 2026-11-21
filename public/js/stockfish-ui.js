@@ -24,9 +24,6 @@ const StockfishAnalyzer = (() => {
       return true;
     } catch (e) { setStatus('error'); return false; }
   }
-  // Опция настраиваемая, если движок её объявил и диапазон не вырожден (min == max).
-  // Эта сборка Stockfish однопоточная: объявляет Threads max 1, но после
-  // `setoption name Threads` перестаёт отвечать на isready — поэтому такие опции не трогаем.
   const canSet = n => { const o = opts[n]; return !!o && !(o.min !== null && o.max !== null && o.max <= o.min); };
   const clampOpt = (n, v) => { const o = opts[n]; return o.min !== null && o.max !== null ? Math.min(o.max, Math.max(o.min, v)) : v; };
   function applyOpts() {
@@ -72,7 +69,7 @@ const StockfishAnalyzer = (() => {
     local();
   }
   function local() {
-    if (!sf) { init(); return; }          // запустится по readyok
+    if (!sf) { init(); return; }
     if (!ready) return;
     if (busy) { queued = true; sf.postMessage('stop'); return; }
     start();
@@ -124,7 +121,7 @@ const StockfishAnalyzer = (() => {
   }
   function handleRemoteUnavailable() { clearTimeout(remoteTimer); if (usingRemote) { usingRemote = false; local(); } }
 
-  // разбор всей партии (быстрый проход по позициям)
+  // разбор всей партии
   const once = (fen, depth) => new Promise(res => { waiter = res; analyze(fen, depth, true); });
   async function review(fens, depth, onStep) {
     if (!cfg.enabled) return null;
@@ -170,9 +167,15 @@ const StockfishAnalyzer = (() => {
     txt('best-move-uci', l && cur ? (sans(l.pv.slice(0, 1))[0] || '—') : '—');
     const bar = $('eval-bar-fill');
     if (bar) bar.style.height = (l ? 100 / (1 + Math.exp(-0.45 * pawns(l))) : 50) + '%';
+    const barLbl = $('eval-bar-label');
+    if (barLbl) {
+      const val = l ? (l.mate !== null ? 'M' + Math.abs(l.mate) : Math.abs(pawns(l)).toFixed(1)) : '0.0';
+      barLbl.textContent = val;
+      barLbl.className = l && pawns(l) < 0 ? 'neg' : '';
+    }
     const box = $('engine-lines'); if (!box) return;
     box.innerHTML = !cfg.enabled ? '<div class="eng-empty">Движок выключен — нажмите кнопку выше, чтобы включить</div>'
-      : lines.filter(Boolean).map(x => `<div class="eng-line"><b class="eng-ev${pawns(x) < 0 ? ' neg' : ''}">${fmt(x)}</b><span class="eng-pv">${pvText(x.pv)}</span></div>`).join('')
+      : lines.filter(Boolean).map(x => `<div class="eng-line" data-uci="${x.pv[0] || ''}" title="Нажмите, чтобы сделать этот ход"><b class="eng-ev${pawns(x) < 0 ? ' neg' : ''}">${fmt(x)}</b><span class="eng-pv">${pvText(x.pv)}</span></div>`).join('')
         || '<div class="eng-empty">Думаю…</div>';
     emit('sf:lines');
   }
@@ -199,15 +202,15 @@ function requestAnalysis() {
 }
 
 const AICommentator = (() => {
-  let lastEval = null;      // последняя финальная оценка (перспектива белых)
-  let lastPhraseAt = 0;     // антиспам: не чаще раза в 2.5 секунды
+  let lastEval = null;
+  let lastPhraseAt = 0;
   const MIN_INTERVAL = 2500;
 
   function t(key, fallback) {
     try {
       const v = window.CH_I18N ? window.CH_I18N.t(key) : undefined;
       if (v && v !== key) return v;
-    } catch (e) { /* i18n недоступен */ }
+    } catch (e) {}
     return fallback;
   }
 
@@ -217,14 +220,11 @@ const AICommentator = (() => {
     const box = document.getElementById('ai-commentary');
     if (!box || !text) return;
     box.textContent = text;
-    // Перезапускаем анимацию появления фразы
     box.classList.remove('ai-say');
     void box.offsetWidth;
     box.classList.add('ai-say');
   }
 
-  // Вызывается после bestmove: evalNum — оценка в перспективе белых,
-  // isMate — движок нашёл мат в текущей позиции.
   function onBestMove(evalNum, isMate) {
     if (typeof evalNum !== 'number' || !isFinite(evalNum)) return;
     const now = Date.now();
@@ -233,7 +233,6 @@ const AICommentator = (() => {
     const prev = lastEval;
     lastEval = evalNum;
 
-    // Первая позиция сессии — иногда здороваемся
     if (prev === null) {
       if (Math.random() < 0.5) { lastPhraseAt = now; say(t('ai.phrase_greeting_' + rand(3), null)); }
       return;
@@ -263,14 +262,12 @@ const AICommentator = (() => {
       say(t('ai.phrase_small_' + rand(3), null));
       return;
     }
-    // Позиция почти не изменилась — изредка вставляем нейтральную реплику
     if (Math.random() < 0.1) {
       lastPhraseAt = now;
       say(t('ai.phrase_quiet_' + rand(4), null));
     }
   }
 
-  // Кнопка 🎲 — выдать фразу по запросу
   function manual() {
     const pool = Math.random();
     let key;
@@ -286,9 +283,6 @@ const AICommentator = (() => {
   return { onBestMove, manual, reset };
 })();
 
-// Кнопка «Ещё фразу» на странице анализа
 function nextAiPhrase() {
   if (typeof AICommentator !== 'undefined') AICommentator.manual();
 }
-
-// Инициализацию страницы анализа выполняет единственный хук pages['analysis']
