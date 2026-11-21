@@ -1034,6 +1034,12 @@
       .features-grid { grid-template-columns: repeat(3, 1fr) !important; }
     }
 
+    /* Плитки «Почему Chess Home?» — на планшете и ПК всегда 3 в ряд
+       (базовое правило в css/main.css даёт 2 колонки на широких экранах) */
+    @media (min-width: 769px) {
+      .features-grid { grid-template-columns: repeat(3, 1fr) !important; }
+    }
+
     /* ── HERO ANIMATED BOARD ──────────────────────────────────── */
     .hero-board-wrap {
       position: relative;
@@ -1766,7 +1772,7 @@
   background: rgba(201,168,76,.15) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23c9a84c' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 12.5l4 4 8-9'/%3E%3C/svg%3E") center/13px no-repeat;
 }
 
-/* карточка-отчёт */
+/* карточка-разбор: кривая перевеса + пометки ходов */
 .ch-report-card {
   position: relative; overflow: hidden;
   padding: 26px 28px 28px;
@@ -1779,35 +1785,64 @@
 .ch-rc-top small { color: var(--text-muted); font-size: 12px; }
 .ch-rc-live { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--green); font-weight: 700; }
 .ch-rc-live i { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
-.ch-rc-title { font-size: 20px; font-weight: 800; margin: 6px 0 2px; }
-.ch-rc-sub { color: var(--text-secondary); font-size: 13px; margin-bottom: 14px; }
+.ch-rc-title { font-size: 17px; font-weight: 800; margin: 6px 0 2px; }
+.ch-rc-sub { color: var(--text-secondary); font-size: 12.5px; margin-bottom: 12px; }
 
-/* график оценки — линия «рисуется» при появлении */
-.ch-eval { width: 100%; height: 86px; display: block; margin-bottom: 18px; }
+/* график оценки — линия «рисуется», метки ошибок вспыхивают после */
+.ch-eval { width: 100%; height: 86px; display: block; margin-bottom: 12px; }
 .ch-eval .ln { fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round;
   stroke-dasharray: 1; stroke-dashoffset: 1; }
 .ch-eval .fl { fill: url(#chEvalGrad); opacity: 0; }
 .ch-eval .mid { stroke: var(--border-light); stroke-dasharray: 3 5; }
 .ch-eval .dot { fill: #fff; stroke: var(--accent); stroke-width: 2; opacity: 0; }
-.in .ch-eval .ln { animation: chDraw 1.8s .2s cubic-bezier(.4,0,.2,1) forwards; }
-.in .ch-eval .fl { animation: chFade 1s 1.4s forwards; }
+.ch-eval .ch-blip { opacity: 0; }
+.ch-eval .ch-blip line { stroke-width: 1; stroke-dasharray: 2 3; opacity: .55; }
+.ch-eval .ch-blip.bad circle  { fill: #e05555; stroke: rgba(224,85,85,.4); stroke-width: 4; }
+.ch-eval .ch-blip.mid2 circle { fill: #e0903a; stroke: rgba(224,144,58,.4); stroke-width: 4; }
+.ch-eval .ch-blip.good circle { fill: var(--green, #4caf72); stroke: rgba(76,175,114,.4); stroke-width: 4; }
+.ch-eval .ch-blip.bad line  { stroke: #e05555; }
+.ch-eval .ch-blip.mid2 line { stroke: #e0903a; }
+.ch-eval .ch-blip.good line { stroke: var(--green, #4caf72); }
+.in .ch-eval .ln  { animation: chDraw 1.8s .2s cubic-bezier(.4,0,.2,1) forwards; }
+.in .ch-eval .fl  { animation: chFade 1s 1.4s forwards; }
 .in .ch-eval .dot { animation: chFade .4s 1.9s forwards; }
+.in .ch-eval .ch-blip    { animation: chFade .5s 2.0s forwards; }
+.in .ch-eval .ch-blip.d2 { animation-delay: 2.2s; }
+.in .ch-eval .ch-blip.d3 { animation-delay: 2.4s; }
 @keyframes chDraw { to { stroke-dashoffset: 0; } }
 @keyframes chFade { to { opacity: 1; } }
 
-.ch-bar-row { margin-top: 15px; }
-.ch-bar-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; font-weight: 700; margin-bottom: 7px; }
-.ch-bar-head b { color: var(--accent-light); font-variant-numeric: tabular-nums; }
-.ch-bar { height: 7px; border-radius: 6px; background: rgba(255,255,255,.07); overflow: hidden; }
-.ch-bar i {
-  display: block; height: 100%; width: 0; border-radius: 6px;
-  background: linear-gradient(90deg, var(--accent-dark), var(--accent), var(--accent-light));
-  transition: width 1.5s cubic-bezier(.22,1,.36,1);
+/* легенда меток */
+.ch-rc-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-secondary); margin: 0 0 14px; }
+.ch-rc-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.ch-rc-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.ch-rc-legend i.blip { background: #e05555; }
+.ch-rc-legend i.mist { background: #e0903a; }
+.ch-rc-legend i.good { background: var(--green, #4caf72); }
+
+/* строки разбора: номер — ход — метка — комментарий — оценка */
+.ch-move-row {
+  display: grid; grid-template-columns: 24px auto auto 1fr auto; align-items: center; gap: 9px;
+  padding: 9px 12px; border-radius: 10px; margin-top: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border); border-left-width: 3px; border-left-color: var(--border);
 }
-.in .ch-bar i { width: var(--w); }
-.ch-bar-row:nth-of-type(2) .ch-bar i { transition-delay: .15s; }
-.ch-bar-row:nth-of-type(3) .ch-bar i { transition-delay: .3s; }
-.ch-rc-note { margin-top: 18px; font-size: 12px; color: var(--text-muted); }
+.ch-move-row.bad  { border-left-color: #e05555; }
+.ch-move-row.mid2 { border-left-color: #e0903a; }
+.ch-move-row.good { border-left-color: var(--green, #4caf72); }
+.ch-mv-no  { font: 700 12px var(--font-mono); color: var(--text-muted); }
+.ch-mv-san { font-weight: 800; font-size: 14px; white-space: nowrap; }
+.ch-mv-q   { font-weight: 800; font-size: 12px; border-radius: 5px; padding: 1px 7px; }
+.ch-move-row.bad  .ch-mv-q { color: #e05555; background: rgba(224,85,85,.14); }
+.ch-move-row.mid2 .ch-mv-q { color: #e0903a; background: rgba(224,144,58,.14); }
+.ch-move-row.good .ch-mv-q { color: var(--green, #4caf72); background: rgba(76,175,114,.14); }
+.ch-mv-note { font-size: 12px; color: var(--text-secondary); line-height: 1.35; }
+.ch-mv-ev   { font: 700 11.5px var(--font-mono); color: var(--accent-light); white-space: nowrap; }
+@media (max-width: 480px) {
+  .ch-mv-note { display: none; }
+  .ch-move-row { grid-template-columns: 22px auto auto 1fr; }
+}
+.ch-rc-note { margin-top: 16px; font-size: 12px; color: var(--text-muted); }
 
 /* появление блоков при прокрутке — только у этих двух */
 .ch-reveal { opacity: 0; transform: translateY(34px); transition: opacity .9s ease, transform .9s cubic-bezier(.22,1,.36,1); }
@@ -1818,6 +1853,44 @@
 .mode-card:hover .mode-icon { transform: translateY(-5px) rotate(-8deg) scale(1.15); }
 .feature-icon { transition: transform .35s cubic-bezier(.34,1.56,.64,1); }
 .feature-card:hover .feature-icon { transform: translateY(-4px) scale(1.12); }
+
+/* ── ПЛИТКИ «Почему Chess Home?» и «Выбери режим» ───────────── */
+.features { max-width: 1200px; margin: 0 auto; padding: 24px 24px 48px; }
+.features-grid { display: grid; gap: 20px; align-items: stretch; }
+.feature-card {
+  position: relative;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
+  padding: 26px 26px 28px;
+  background: linear-gradient(180deg, rgba(255,255,255,.04), rgba(255,255,255,.01)), var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg, 16px);
+  box-shadow: 0 6px 24px rgba(0,0,0,.28);
+  transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
+}
+.feature-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(201,168,76,.55);
+  box-shadow: 0 12px 32px rgba(0,0,0,.4), 0 0 0 1px rgba(201,168,76,.12);
+}
+.feature-icon {
+  display: inline-grid; place-items: center;
+  width: 52px; height: 52px; margin: 0 0 6px;
+  font-size: 26px; line-height: 1;
+  background: rgba(201,168,76,.12);
+  border: 1px solid rgba(201,168,76,.28);
+  border-radius: 14px;
+}
+.feature-card h3 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: .1px; }
+.feature-card p { margin: 0; font-size: 14px; line-height: 1.6; color: var(--text-secondary); }
+
+.mode-card {
+  transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
+}
+.mode-card:hover {
+  transform: translateY(-3px);
+  border-color: rgba(201,168,76,.55);
+  box-shadow: 0 12px 32px rgba(0,0,0,.4);
+}
 
 /* ── АДАПТИВ ───────────────────────────────────────────── */
 @media (max-width: 900px) {
@@ -1836,7 +1909,7 @@
   #page-home *, #page-home *::before, #page-home *::after { animation: none !important; transition: none !important; }
   .ch-reveal { opacity: 1; transform: none; }
   .ch-eval .ln { stroke-dashoffset: 0; } .ch-eval .fl, .ch-eval .dot { opacity: 1; }
-  .ch-bar i { width: var(--w); }
+  .ch-eval .ch-blip { opacity: 1; }
   #page-home .hero-title .accent { background-position: 0 0; }
 }
 </style>
@@ -2002,39 +2075,60 @@
     <div class="ch-report-wrap">
       <div class="ch-report ch-reveal">
         <div class="ch-report-text">
-          <div class="ch-report-kicker" data-i18n="home.report_kicker">Разбор партий</div>
-          <h2 data-i18n="home.report_title">Узнай, где теряются очки, и что тренировать</h2>
-          <p data-i18n="home.report_text">Загрузи партию — движок пройдёт по каждому ходу, отметит зевки и покажет лучшие продолжения прямо на доске.</p>
+          <div class="ch-report-kicker" data-i18n="home.report_kicker">Анализ после партии</div>
+          <h2 data-i18n="home.report_title">Каждый зевок — под микроскопом</h2>
+          <p data-i18n="home.report_text">Запусти разбор — и Stockfish пройдёт по всей партии: покажет, где улетала оценка, пометит зевки и ошибки и тут же предложит лучшие продолжения прямо на доске.</p>
           <ul class="ch-checks">
-            <li data-i18n="home.report_check1">Оценка каждой позиции от Stockfish</li>
-            <li data-i18n="home.report_check2">Лучший ход и варианты на 20+ ходов</li>
-            <li data-i18n="home.report_check3">Партии сохраняются в PGN</li>
+            <li data-i18n="home.report_check1">График перевеса: провалы видны с одного взгляда</li>
+            <li data-i18n="home.report_check2">Метки у ходов: зевок ??, ошибка ?, неточность ?!</li>
+            <li data-i18n="home.report_check3">Тап по графику — доска прыгает к той позиции</li>
           </ul>
-          <button class="btn btn-primary btn-lg" onclick="location.href='/analysis'" data-i18n="home.report_cta">Разобрать партию</button>
+          <button class="btn btn-primary btn-lg" onclick="location.href='/analysis'" data-i18n="home.report_cta">Разобрать свою партию</button>
         </div>
         <div class="ch-report-stage">
           <div class="ch-report-card">
-            <div class="ch-rc-top"><small data-i18n="home.rc_example">Пример отчёта</small><span class="ch-rc-live"><i></i><span data-i18n="home.rc_live">Анализ</span></span></div>
-            <div class="ch-rc-title" data-i18n="home.rc_title">Что мешает выигрывать</div>
-            <div class="ch-rc-sub" data-i18n="home.rc_sub">Доля проигранных партий с ошибкой</div>
+            <div class="ch-rc-top"><small data-i18n="home.report_example">Пример разбора</small><span class="ch-rc-live"><i></i><span data-i18n="home.report_live">Ход 24 из 40</span></span></div>
+            <div class="ch-rc-title" data-i18n="home.report_curve">Кривая перевеса</div>
+            <div class="ch-rc-sub" data-i18n="home.report_curve_sub">Оценка Stockfish после каждого хода</div>
             <svg class="ch-eval" viewBox="0 0 320 86" preserveAspectRatio="none" aria-hidden="true">
               <defs><linearGradient id="chEvalGrad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0" stop-color="#c9a84c" stop-opacity=".35"/><stop offset="1" stop-color="#c9a84c" stop-opacity="0"/></linearGradient></defs>
               <line class="mid" x1="0" y1="43" x2="320" y2="43"/>
-              <path class="fl" d="M0 50 C20 46 30 56 50 52 S85 30 105 36 S140 66 165 58 S205 20 232 28 S280 14 320 10 L320 86 L0 86Z"/>
-              <path class="ln" pathLength="1" d="M0 50 C20 46 30 56 50 52 S85 30 105 36 S140 66 165 58 S205 20 232 28 S280 14 320 10"/>
-              <circle class="dot" cx="320" cy="10" r="4"/>
+              <path class="fl" d="M0 48 C25 44 45 40 70 42 S95 66 110 70 S130 34 160 32 S195 60 210 66 S240 30 275 20 S300 12 320 12 L320 86 L0 86Z"/>
+              <path class="ln" pathLength="1" d="M0 48 C25 44 45 40 70 42 S95 66 110 70 S130 34 160 32 S195 60 210 66 S240 30 275 20 S300 12 320 12"/>
+              <g class="ch-blip bad"><line x1="110" y1="70" x2="110" y2="86"/><circle cx="110" cy="70" r="4.5"/></g>
+              <g class="ch-blip mid2 d2"><line x1="210" y1="66" x2="210" y2="86"/><circle cx="210" cy="66" r="4.5"/></g>
+              <g class="ch-blip good d3"><line x1="275" y1="20" x2="275" y2="86"/><circle cx="275" cy="20" r="4.5"/></g>
+              <circle class="dot" cx="320" cy="12" r="4"/>
             </svg>
-            <div class="ch-bar-row"><div class="ch-bar-head"><span data-i18n="home.rc_bar1">Фигуры без защиты</span><b data-count="23">0%</b></div><div class="ch-bar"><i style="--w:23%"></i></div></div>
-            <div class="ch-bar-row"><div class="ch-bar-head"><span data-i18n="home.rc_bar2">Пропущенная тактика</span><b data-count="18">0%</b></div><div class="ch-bar"><i style="--w:18%"></i></div></div>
-            <div class="ch-bar-row"><div class="ch-bar-head"><span data-i18n="home.rc_bar3">Ошибки в эндшпиле</span><b data-count="12">0%</b></div><div class="ch-bar"><i style="--w:12%"></i></div></div>
-            <div class="ch-rc-note" data-i18n="home.rc_note">Цифры в примере условные</div>
+            <div class="ch-rc-legend">
+              <span><i class="blip"></i><span data-i18n="home.report_legend_blip">зевок ??</span></span>
+              <span><i class="mist"></i><span data-i18n="home.report_legend_mist">ошибка ?</span></span>
+              <span><i class="good"></i><span data-i18n="home.report_legend_good">сильный ход !</span></span>
+            </div>
+            <div class="ch-move-row bad">
+              <span class="ch-mv-no">21</span><span class="ch-mv-san">…Rxd5</span><span class="ch-mv-q">??</span>
+              <span class="ch-mv-note" data-i18n="home.report_mv1_note">Зевок — ладья попала под двойное нападение</span>
+              <span class="ch-mv-ev">+0.3 → +3.1</span>
+            </div>
+            <div class="ch-move-row mid2">
+              <span class="ch-mv-no">24</span><span class="ch-mv-san">Qe2</span><span class="ch-mv-q">?</span>
+              <span class="ch-mv-note" data-i18n="home.report_mv2_note">Точнее было 24.g4 с продолжением атаки</span>
+              <span class="ch-mv-ev">+1.1 → +2.0</span>
+            </div>
+            <div class="ch-move-row good">
+              <span class="ch-mv-no">27</span><span class="ch-mv-san">g4!</span><span class="ch-mv-q">!</span>
+              <span class="ch-mv-note" data-i18n="home.report_mv3_note">Лучший ход — инициатива за вами</span>
+              <span class="ch-mv-ev">+0.4</span>
+            </div>
+            <div class="ch-rc-note" data-i18n="home.report_note">Партия и цифры в примере — условные</div>
           </div>
         </div>
       </div>
     </div>
 
-    <div class="features" style="padding-top:0">
+    
+    <div class="features">
       <h2 class="section-title" data-i18n="home.features_title" data-i18n-html="home.features_title">Почему <span>Chess Home</span>?</h2>
       <div class="features-grid">
         <div class="feature-card">
@@ -2128,6 +2222,7 @@
       </div>
     </div>
   </div>
+</div>   <!-- /#page-app -->
 
   <div id="page-lobby" class="page">
     <div style="padding:24px;max-width:1100px;margin:0 auto">
@@ -3916,13 +4011,13 @@ window.__pzLbMode = (function(){ try { return localStorage.getItem('pzLbMode') =
 </script>
 
 <script>
-// ── СЛУЧАЙНЫЕ ФРАЗЫ СВЕРХУ (RU / EN) ───────────────────────
+// ── СЛУЧАЙНЫЕ ФРАЗЫ СВЕРХУ (RU / EN / DE) ───────────────────
 (function() {
   'use strict';
   // Файлы: одна фраза на строку; строки с # в начале игнорируются.
-  var URLS = { ru: '/data/chess-thoughts.txt', en: '/data/chess-thoughts.en.txt' };
-  var LABELS = { ru: '✦ Мысль от ChessHome AI', en: '✦ A thought from ChessHome AI' };
-  var TITLES = { ru: 'Нажми — будет другая мысль', en: 'Click for another thought' };
+  var URLS = { ru: '/data/chess-thoughts.txt', en: '/data/chess-thoughts.en.txt', de: '/data/chess-thoughts.de.txt' };
+  var LABELS = { ru: '✦ Мысль от ChessHome AI', en: '✦ A thought from ChessHome AI', de: '✦ Ein Gedanke von ChessHome AI' };
+  var TITLES = { ru: 'Нажми — будет другая мысль', en: 'Click for another thought', de: 'Klick für einen anderen Gedanken' };
   var ROTATE_MS = 20000; // автосмена фразы
   var FALLBACK = {
     ru: [
@@ -3934,6 +4029,11 @@ window.__pzLbMode = (function(){ try { return localStorage.getItem('pzLbMode') =
       "Every grandmaster once didn't know how the knight moves.",
       'Patience is the most underrated piece on the board.',
       'Hit "Play" — the board won\'t checkmate itself.'
+    ],
+    de: [
+      'Jeder Großmeister wusste einmal nicht, wie das Pferd zieht.',
+      'Geduld ist die am meisten unterschätzte Figur auf dem Brett.',
+      'Klick auf "Spielen" — das Brett macht kein Matt von allein.'
     ]
   };
 
@@ -3952,6 +4052,7 @@ window.__pzLbMode = (function(){ try { return localStorage.getItem('pzLbMode') =
     if (typeof v === 'object') v = v.lang || v.language || v.code || v.locale || '';
     v = String(v).toLowerCase();
     if (v.indexOf('en') === 0) return 'en';
+    if (v.indexOf('de') === 0) return 'de';
     if (v.indexOf('ru') === 0) return 'ru';
     return null;
   }

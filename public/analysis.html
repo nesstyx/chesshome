@@ -52,6 +52,7 @@
 
   .an-head { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:10px; padding-bottom:10px; border-bottom:1px solid var(--border); }
   .an-head h1 { font-family:var(--font-display); font-size:22px; margin:0; }
+  .an-head .an-badge { display:inline-flex; align-items:center; justify-content:center; width:42px; height:42px; border-radius:12px; flex-shrink:0; background:linear-gradient(145deg, rgba(201,168,76,.22), rgba(201,168,76,.07)); border:1px solid rgba(201,168,76,.4); font-size:20px; }
   .an-head p { color:var(--text-secondary); font-size:13px; margin:0; }
   .board-row { display:flex; gap:10px; align-items:stretch; }
 
@@ -105,12 +106,103 @@
   .an-actions { display:flex; gap:10px; } .an-actions .btn { flex:1; }
   @media (max-width:768px) { .an-side{width:100%; min-width:0;} .eval-row .eval-score{font-size:26px!important;} }
 </style>
+
+<style>
+  /* ════════ ПОЛИРОВКА ДИЗАЙНА (v2) ════════ */
+  /* Шапка: бейдж-иконка + градиентный заголовок + золотая линия */
+  .an-head { align-items:center; gap:16px; padding-bottom:14px; margin-bottom:16px; border-bottom:1px solid rgba(201,168,76,.25); }
+  .an-head h1 {
+    display:flex; align-items:center; gap:12px; font-size:24px; margin:0;
+    background:linear-gradient(to right, var(--text-primary,#f0f0f5), var(--accent,#c9a84c));
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+  }
+  .an-head h1 .an-badge {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:42px; height:42px; border-radius:12px; flex-shrink:0; font-size:20px;
+    background:linear-gradient(145deg, rgba(201,168,76,.22), rgba(201,168,76,.07));
+    border:1px solid rgba(201,168,76,.4);
+    -webkit-text-fill-color:initial;
+  }
+  /* Панель навигации по ходам — цельный «пульт» */
+  .an-controls {
+    background:var(--bg-card,#1e2028); border:1px solid var(--border); border-radius:14px;
+    padding:8px 10px; margin-top:12px;
+  }
+  .an-controls .btn { border-radius:8px; }
+  .an-controls span { font-weight:700; color:var(--text-secondary); }
+  /* Метки-чипы на полях FEN / PGN */
+  .an-field { position:relative; }
+  .an-field .an-tag {
+    position:absolute; left:10px; top:50%; transform:translateY(-50%);
+    font:700 10px var(--font-mono); letter-spacing:.08em; color:var(--accent);
+    background:rgba(201,168,76,.12); border:1px solid rgba(201,168,76,.3);
+    border-radius:5px; padding:2px 6px; pointer-events:none; z-index:2;
+  }
+  .an-field .an-tag.tl { top:9px; transform:none; }
+  #analysis-fen-input { padding-left:50px !important; }
+  #pgn-input { padding-top:26px !important; }
+  /* Оценка — акцентная «табличка» */
+  .an-side .eval-row .eval-score {
+    font:800 30px/1 var(--font-mono); text-align:center;
+    padding:10px 14px; border-radius:12px;
+    background:linear-gradient(145deg, rgba(201,168,76,.14), rgba(201,168,76,.05));
+    border:1px solid rgba(201,168,76,.3);
+    color:var(--accent,#c9a84c);
+  }
+  .an-side .eval-row .eval-score.negative {
+    color:var(--text-primary,#f0f0f5);
+    border-color:var(--border-light);
+    background:linear-gradient(145deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+  }
+  /* Движок: панель и линии вариантов */
+  .an-side .engine-panel {
+    border-radius:16px;
+    background:linear-gradient(180deg, rgba(201,168,76,.07), rgba(0,0,0,0) 130px), var(--bg-card,#1e2028);
+  }
+  #engine-lines { display:flex; flex-direction:column; gap:4px; }
+  .eng-line {
+    border:1px solid transparent; border-radius:8px; padding:8px 12px;
+    background:var(--bg-secondary,#161820); transition:border-color .15s;
+  }
+  .eng-line:nth-child(odd) { background:var(--bg-secondary,#161820); }
+  .eng-line:hover { border-color:rgba(201,168,76,.35); }
+  .eng-ev {
+    background:rgba(201,168,76,.14); border:1px solid rgba(201,168,76,.25);
+    color:var(--accent,#c9a84c); border-radius:6px; padding:2px 7px;
+    font-weight:800; text-align:center;
+  }
+  .eng-ev.neg {
+    color:var(--text-primary,#f0f0f5);
+    background:rgba(255,255,255,.07); border-color:var(--border-light);
+  }
+  /* AI-комментатор: золотая линия слева, курсив */
+  #ai-commentator-panel { position:relative; overflow:hidden; }
+  #ai-commentator-panel::before {
+    content:''; position:absolute; left:0; top:0; bottom:0; width:3px;
+    background:linear-gradient(180deg, var(--accent,#c9a84c), transparent);
+  }
+  #ai-commentary { font-style:italic; }
+  /* Список ходов: аккуратный скроллбар */
+  .moves-list { scrollbar-width:thin; scrollbar-color:rgba(201,168,76,.4) transparent; }
+  .moves-list::-webkit-scrollbar { width:8px; }
+  .moves-list::-webkit-scrollbar-thumb { background:rgba(201,168,76,.35); border-radius:6px; }
+  .moves-list::-webkit-scrollbar-track { background:transparent; }
+  /* График оценки: лёгкий отклик на наведение */
+  #eval-graph { transition:border-color .2s, transform .2s; }
+  #eval-graph:hover { border-color:rgba(201,168,76,.5); transform:translateY(-1px); }
+  .an-actions .btn { border-radius:12px; }
+  @media (max-width:768px) {
+    .an-head h1 { font-size:20px; }
+    .an-head h1 .an-badge { width:34px; height:34px; font-size:16px; border-radius:10px; }
+    .an-side .eval-row .eval-score { font-size:24px !important; padding:8px 12px; }
+  }
+</style>
 </head>
 <body>
   <div id="page-analysis" class="page active">
     <div style="padding:12px 20px;max-width:1380px;margin:0 auto">
       <div class="an-head">
-        <h1>🔍 Анализ партии</h1>
+        <h1><span class="an-badge">🔍</span> Анализ партии</h1>
         <p>Stockfish в браузере: ходите с любой позиции, крутите колёсико, тяните угол для размера</p>
       </div>
       <div class="analysis-layout">
@@ -131,8 +223,8 @@
             <span id="move-counter">0 / 0</span><div class="sp"></div>
             <button class="btn btn-ghost btn-sm" onclick="chessBoard.flipBoard()" title="Развернуть (F)">↕ Развернуть</button>
           </div>
-          <div class="an-field"><input class="form-input" id="analysis-fen-input" spellcheck="false" title="Измените FEN и нажмите Enter"><button class="btn btn-ghost btn-sm" onclick="copyField('analysis-fen-input')" title="Копировать FEN">⧉</button></div>
-          <div class="an-field"><textarea class="form-input" id="pgn-input" rows="4" spellcheck="false" placeholder="Вставьте или измените PGN — партия загрузится автоматически" style="resize:vertical"></textarea><button class="btn btn-ghost btn-sm" onclick="copyField('pgn-input')" title="Копировать PGN">⧉</button></div>
+          <div class="an-field"><span class="an-tag">FEN</span><input class="form-input" id="analysis-fen-input" spellcheck="false" title="Измените FEN и нажмите Enter"><button class="btn btn-ghost btn-sm" onclick="copyField('analysis-fen-input')" title="Копировать FEN">⧉</button></div>
+          <div class="an-field"><span class="an-tag tl">PGN</span><textarea class="form-input" id="pgn-input" rows="4" spellcheck="false" placeholder="Вставьте или измените PGN — партия загрузится автоматически" style="resize:vertical"></textarea><button class="btn btn-ghost btn-sm" onclick="copyField('pgn-input')" title="Копировать PGN">⧉</button></div>
         </div>
         <div class="an-side">
           <div class="engine-panel" style="position:relative;flex:none">

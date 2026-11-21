@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Игра с компьютером — Chess Home</title>
 <meta name="description" content="Играйте в шахматы против компьютера: пять уровней, от новичка до Stockfish 16. Все расчёты — прямо в вашем браузере.">
-<link rel="stylesheet" href="/css/main.css">
-<link rel="icon" type="image/png" href="/img/logo/favicon.png">
-<script src="/js/utils.js"></script>
-<script src="/js/i18n.js"></script>
+<link rel="stylesheet" href="css/main.css">
+<link rel="icon" type="image/png" href="img/logo/favicon.png">
+<script src="js/utils.js"></script>
+<script src="js/i18n.js"></script>
 <!-- Yandex.Metrika counter -->
 <script type="text/javascript">
     (function(m,e,t,r,i,k,a){
@@ -24,7 +24,8 @@
 <!-- /Yandex.Metrika counter -->
 
 <style>
-  /* Все стили страницы лежат под префиксом .vsc — с остальным сайтом не пересекаются */
+  /* Все стили страницы лежат под префиксом .vsc — с остальным сайтом не пересекаются.
+     Доска — общий компонент js/board.js (#chess-board), её стили живут в main.css. */
   .vsc {
     --vsc-bg: var(--bg-primary, #0e0f13);
     --vsc-card: var(--bg-card, #1e2028);
@@ -50,8 +51,22 @@
     gap: 24px; justify-content: center; align-items: start;
   }
   @media (max-width: 960px) {
-    .vsc { --bs: min(calc(100vw - 24px), 560px); padding-top: 68px; }
-    .vsc-layout { grid-template-columns: var(--bs); }
+    .vsc { padding-top: 68px; }
+    .vsc-layout { grid-template-columns: minmax(0, var(--bs, 92vw)); }
+  }
+
+  /* ── Колонка доски ───────────────────────────────── */
+  .vsc-boardcol { min-width: 0; }
+  .vsc .board-wrapper { position: relative; margin: 0 auto; display: flex; justify-content: center; }
+  /* Подстраховка, если в main.css нет стилей ручки ресайза общей доски */
+  .vsc .board-resize-handle {
+    position: absolute; right: 2px; bottom: 2px; width: 20px; height: 20px;
+    cursor: nwse-resize; z-index: 30; touch-action: none;
+  }
+  .vsc .board-resize-handle::after {
+    content: ''; position: absolute; right: 3px; bottom: 3px; width: 10px; height: 10px;
+    border-right: 3px solid var(--vsc-accent); border-bottom: 3px solid var(--vsc-accent);
+    border-bottom-right-radius: 4px; opacity: 0.5;
   }
 
   /* ── Полоски игроков ─────────────────────────────── */
@@ -62,6 +77,7 @@
   .vsc-plevel { font-size: 12px; color: var(--vsc-muted); white-space: nowrap; }
   .vsc-cap { font-size: 17px; line-height: 1; letter-spacing: -2px; color: var(--vsc-muted); min-height: 17px; flex: 1; overflow: hidden; white-space: nowrap; }
   .vsc-cap .adv { font-size: 12px; letter-spacing: 0; margin-left: 6px; font-weight: 700; }
+  .vsc-cap img { width: 20px; height: 20px; margin-right: -6px; vertical-align: middle; }
   .vsc-clock {
     margin-left: auto; min-width: 84px; text-align: center; padding: 5px 10px; border-radius: 8px;
     font: 700 20px/1.2 ui-monospace, 'SF Mono', Consolas, monospace;
@@ -70,51 +86,6 @@
   .vsc-clock.active { color: #fff; background: #2b3a2e; border-color: var(--vsc-green); }
   .vsc-clock.low { color: #fff; background: #5a2420; border-color: var(--vsc-red); }
   .vsc-clock[hidden] { display: none; }
-
-  /* ── Доска ───────────────────────────────────────── */
-  .vsc-boardwrap { position: relative; width: var(--bs); }
-  .vsc-board {
-    width: var(--bs); height: var(--bs); display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr);
-    border-radius: 6px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-    touch-action: none; user-select: none; -webkit-user-select: none;
-  }
-  .sq { position: relative; display: flex; align-items: center; justify-content: center; cursor: default; }
-  .sq.light { background-color: var(--board-light, #f0d9b5); }
-  .sq.dark  { background-color: var(--board-dark, #b58863); }
-  .sq.last { box-shadow: inset 0 0 0 100px var(--board-move, rgba(201,168,76,0.35)); }
-  .sq.sel  { box-shadow: inset 0 0 0 100px var(--board-highlight, rgba(201,168,76,0.6)); }
-  .sq.check.light, .sq.check.dark { background-image: radial-gradient(circle, var(--board-check, rgba(220,60,60,0.7)) 0%, rgba(220,60,60,0.45) 45%, rgba(220,60,60,0) 78%); }
-  .sq::before { /* подписи вертикалей/горизонталей */
-    content: attr(data-r); position: absolute; top: 2px; left: 3px; font-size: calc(var(--bs) / 48);
-    font-weight: 700; pointer-events: none; z-index: 1;
-  }
-  .sq::after {
-    content: attr(data-f); position: absolute; bottom: 1px; right: 3px; font-size: calc(var(--bs) / 48);
-    font-weight: 700; pointer-events: none; z-index: 1;
-  }
-  .sq.light::before, .sq.light::after { color: var(--board-dark, #b58863); }
-  .sq.dark::before, .sq.dark::after { color: var(--board-light, #f0d9b5); }
-  .vsc-board.interactive .sq.mine { cursor: grab; }
-  .sq .dotm { position: absolute; width: 28%; height: 28%; border-radius: 50%; background: rgba(20,60,20,0.38); pointer-events: none; }
-  .sq .capm { position: absolute; inset: 4%; border-radius: 50%; border: calc(var(--bs) / 90) solid rgba(20,60,20,0.38); pointer-events: none; }
-  img.pc { width: 88%; height: 88%; position: relative; z-index: 2; pointer-events: none; -webkit-user-drag: none; }
-  .vsc-ghost { position: fixed; z-index: 100000; pointer-events: none; transform: translate(-50%, -52%); filter: drop-shadow(0 6px 8px rgba(0,0,0,0.5)); }
-  .sq.drag-src img.pc { opacity: 0.25; }
-  .vsc-cap img { width: 20px; height: 20px; margin-right: -6px; vertical-align: middle; }
-
-  /* Превращение пешки */
-  .vsc-promo {
-    position: absolute; inset: 0; z-index: 20; background: rgba(8,8,14,0.72); border-radius: 6px;
-    display: none; align-items: center; justify-content: center; backdrop-filter: blur(2px);
-  }
-  .vsc-promo.open { display: flex; }
-  .vsc-promo-box { background: var(--vsc-card); border: 1px solid var(--vsc-accent); border-radius: 14px; padding: 14px; display: flex; gap: 8px; }
-  .vsc-promo-box button {
-    width: calc(var(--bs) / 8 * 1.1); height: calc(var(--bs) / 8 * 1.1); border-radius: 10px; cursor: pointer;
-    background: var(--board-light, #f0d9b5); border: 2px solid transparent; padding: 4px; display: flex; align-items: center; justify-content: center;
-  }
-  .vsc-promo-box button img { width: 100%; height: 100%; }
-  .vsc-promo-box button:hover { border-color: var(--vsc-accent); }
 
   /* ── Правая панель ───────────────────────────────── */
   .vsc-panel {
@@ -189,7 +160,7 @@
   .vsc-status.draw { border-color: var(--vsc-accent); background: rgba(201,168,76,0.10); }
   @keyframes vscspin { to { transform: rotate(360deg); } }
   .vsc-moves {
-    height: 230px; overflow-y: auto; border: 1px solid var(--vsc-border); border-radius: 10px; background: var(--vsc-card2);
+    height: 230px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--vsc-border); border-radius: 10px; background: var(--vsc-card2);
     padding: 6px; font-size: 14px; display: grid; grid-template-columns: 34px 1fr 1fr; align-content: start; gap: 1px 4px;
   }
   .vsc-moves .no { color: var(--vsc-muted); padding: 4px 4px; text-align: right; font-size: 12.5px; }
@@ -203,6 +174,22 @@
   .vsc-actions[hidden], .vsc-btn[hidden] { display: none; }
   .vsc-vs { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 13px; color: var(--vsc-muted); }
   .vsc-vs b { color: var(--vsc-text); }
+
+  /* Диалог превращения пешки — показывает js/board.js (#modal-promotion) */
+  .vsc #modal-promotion {
+    display: none; position: fixed; inset: 0; z-index: 100000; background: rgba(8,8,14,0.72);
+    align-items: center; justify-content: center; backdrop-filter: blur(2px);
+  }
+  .vsc #modal-promotion.open { display: flex; }
+  .vsc #modal-promotion .promo-box { background: var(--vsc-card); border: 1px solid var(--vsc-accent); border-radius: 14px; padding: 16px 18px; }
+  .vsc #modal-promotion .promo-box h3 { margin: 0 0 12px; font-size: 15px; color: var(--vsc-text); }
+  .vsc #modal-promotion .promo-row { display: flex; gap: 10px; }
+  .vsc #modal-promotion .promo-piece-btn {
+    width: 76px; height: 76px; border-radius: 12px; cursor: pointer; padding: 6px;
+    background: var(--board-light, #f0d9b5); border: 2px solid transparent;
+  }
+  .vsc #modal-promotion .promo-piece-btn:hover { border-color: var(--vsc-accent); }
+  .vsc #modal-promotion .promo-piece-btn img { width: 100%; height: 100%; display: block; }
 </style>
 </head>
 <body>
@@ -210,8 +197,8 @@
 <main class="vsc">
   <div class="vsc-layout">
 
-    <!-- ═════ ДОСКА ═════ -->
-    <section>
+    <!-- ═════ ДОСКА (общий компонент js/board.js) ═════ -->
+    <section class="vsc-boardcol">
       <div class="vsc-strip" id="strip-top">
         <span class="vsc-pname" id="top-name"></span>
         <span class="vsc-plevel" id="top-level"></span>
@@ -219,10 +206,8 @@
         <span class="vsc-clock" id="top-clock" hidden>--:--</span>
       </div>
 
-      <div class="vsc-boardwrap">
-        <div class="vsc-board" id="vsc-board"></div>
-        <div class="vsc-promo" id="vsc-promo"><div class="vsc-promo-box" id="vsc-promo-box"></div></div>
-      </div>
+      <!-- board.js сам создаёт/переносит сюда #chess-board -->
+      <div class="board-wrapper" id="game-board-container"></div>
 
       <div class="vsc-strip" id="strip-bottom">
         <span class="vsc-pname" id="bot-name"></span>
@@ -246,9 +231,9 @@
 
         <div class="vsc-label">Ваш цвет</div>
         <div class="vsc-colors" id="colors">
-          <button class="vsc-color" data-c="w" type="button"><span class="ci"><img src="/img/pieces/wK.svg" alt=""></span>Белые</button>
+          <button class="vsc-color" data-c="w" type="button"><span class="ci"><img src="img/pieces/wK.svg" alt=""></span>Белые</button>
           <button class="vsc-color" data-c="random" type="button"><span class="ci">🎲</span>Случайно</button>
-          <button class="vsc-color" data-c="b" type="button"><span class="ci"><img src="/img/pieces/bK.svg" alt=""></span>Чёрные</button>
+          <button class="vsc-color" data-c="b" type="button"><span class="ci"><img src="img/pieces/bK.svg" alt=""></span>Чёрные</button>
         </div>
 
         <button class="vsc-btn vsc-start" id="btn-start" type="button">Начать игру</button>
@@ -281,41 +266,280 @@
       </div>
     </aside>
   </div>
+
+  <!-- Служебные элементы, которые трогает js/board.js (скрыты) -->
+  <span id="player-bottom-name" hidden></span>
+  <span id="player-top-name" hidden></span>
+
+  <!-- Диалог превращения пешки — открывает js/board.js -->
+  <div id="modal-promotion">
+    <div class="promo-box">
+      <h3>Превращение пешки</h3>
+      <div class="promo-row">
+        <button class="promo-piece-btn" data-piece="Q" type="button"><img alt="Ферзь"></button>
+        <button class="promo-piece-btn" data-piece="R" type="button"><img alt="Ладья"></button>
+        <button class="promo-piece-btn" data-piece="B" type="button"><img alt="Слон"></button>
+        <button class="promo-piece-btn" data-piece="N" type="button"><img alt="Конь"></button>
+      </div>
+    </div>
+  </div>
 </main>
 
-<script src="/js/header/core.js"></script>
-  <script src="/js/header/styles.js"></script>
-  <script src="/js/header/render.js"></script>
-  <script src="/js/header/right.js"></script>
-  <script src="/js/header/api.js"></script>
-<script src="/js/pieces.js"></script>
-<script src="/js/vs-computer-core.js"></script>
+<script src="js/header/core.js"></script>
+  <script src="js/header/styles.js"></script>
+  <script src="js/header/render.js"></script>
+  <script src="js/header/right.js"></script>
+  <script src="js/header/api.js"></script>
+<script src="js/pieces.js"></script>
+<script src="js/vs-computer-core.js"></script>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     АДАПТЕР: window.ChessEngine для общей доски js/board.js на базе CHCore.
+     Эта страница не тянет общий движок сайта, поэтому мост ChessEngine ↔
+     CHCore (js/vs-computer-core.js) живёт здесь. Загружаться должен ДО
+     js/board.js. Хук window.__CHVSC_ON_MOVE вызывается при каждом ходе,
+     который доска сделала сама (ход человека); во время программных
+     синхронизаций страница ставит window.__CHVSC_SUPPRESS = true.
+     ═══════════════════════════════════════════════════════════════════ -->
 <script>
 (function () {
   'use strict';
   var C = window.CHCore;
+  if (!C || !C.Position) { console.warn('[vsc] CHCore не найден — адаптер ChessEngine не работает'); return; }
+
+  var PROMO_CH  = { 5: 'Q', 4: 'R', 3: 'B', 2: 'N' };
+  var PROMO_NUM = { Q: 5, R: 4, B: 3, N: 2 };
+
+  // 0x88 (CHCore) -> 0..63 (board.js) и обратно
+  function sq64(sq88) { return (sq88 >> 4) * 8 + (sq88 & 7); }
+  function sq88(sq64) { return ((sq64 >> 3) << 4) | (sq64 & 7); }
+  function pType(p)   { return 'PNBRQK'.charAt((p & 7) - 1); }
+  function pColor(p)  { return (p >> 3) ? 'b' : 'w'; }
+
+  // Состояние board.js: { board[64], turn, history[], capturedWhite[], capturedBlack[], _fen, _pos, _legal }
+  function ensurePos(st) {
+    if (!st._pos) { st._pos = new C.Position(); st._pos.setFEN(st._fen); st._legal = null; }
+    if (!st._legal) st._legal = st._pos.legalMoves();
+    return st;
+  }
+  function fillBoard(st) {
+    var pos = ensurePos(st)._pos;
+    for (var r = 0; r < 8; r++) for (var f = 0; f < 8; f++) {
+      var p = pos.board[r * 16 + f];
+      st.board[r * 8 + f] = p ? { type: pType(p), color: pColor(p) } : null;
+    }
+  }
+  function makeState(pos) {
+    var st = { board: new Array(64), turn: pos.side ? 'b' : 'w', history: [],
+      capturedWhite: [], capturedBlack: [], _fen: pos.getFEN(), _pos: pos, _legal: null };
+    fillBoard(st);
+    return st;
+  }
+
+  function parseFEN(fen) { return makeState((function () { var p = new C.Position(); p.setFEN(fen); return p; })()); }
+
+  function deepClone(st) {
+    return {
+      board: st.board.map(function (x) { return x ? { type: x.type, color: x.color } : null; }),
+      turn: st.turn,
+      history: (st.history || []).slice(),
+      capturedWhite: (st.capturedWhite || []).slice(),
+      capturedBlack: (st.capturedBlack || []).slice(),
+      _fen: st._fen, _pos: null, _legal: null
+    };
+  }
+
+  // {from,to,promotion?} (0..63) -> кодированный ход CHCore
+  function mvFromObj(st, mv) {
+    ensurePos(st);
+    var fr = sq88(mv.from), to = sq88(mv.to), want = mv.promotion ? PROMO_NUM[mv.promotion] : 0;
+    for (var i = 0; i < st._legal.length; i++) {
+      var m = st._legal[i];
+      if (C.mFrom(m) !== fr || C.mTo(m) !== to) continue;
+      if (want && C.mPromo(m) !== want) continue;
+      return m;
+    }
+    return 0;
+  }
+
+  // кодированный ход CHCore -> {from,to,promotion?,enPassant?,castle?}
+  function mvToObj(st, m) {
+    ensurePos(st);
+    var from = C.mFrom(m), to = C.mTo(m);
+    var o = { from: sq64(from), to: sq64(to) };
+    var pr = C.mPromo ? C.mPromo(m) : 0;
+    if (pr) o.promotion = PROMO_CH[pr] || 'Q';
+    var p = st._pos.board[from];
+    if (p && (p & 7) === 1 && (from & 7) !== (to & 7) && !st._pos.board[to]) o.enPassant = true;
+    if (p && (p & 7) === 6 && Math.abs((from & 7) - (to & 7)) === 2) o.castle = true;
+    return o;
+  }
+
+  function legalMoves(st, fromSq) {
+    ensurePos(st);
+    var out = [], fr = (fromSq === undefined || fromSq === null) ? -1 : sq88(fromSq);
+    for (var i = 0; i < st._legal.length; i++) {
+      if (fr >= 0 && C.mFrom(st._legal[i]) !== fr) continue;
+      out.push(mvToObj(st, st._legal[i]));
+    }
+    return out;
+  }
+
+  function toSAN(st, mv) {
+    ensurePos(st);
+    var m = mvFromObj(st, mv);
+    return m ? st._pos.sanOf(m, st._legal) : '';
+  }
+
+  function applyMove(st, mv) {
+    ensurePos(st);
+    var m = mvFromObj(st, mv);
+    if (!m) return null;
+    var moverColor = st._pos.side ? 'b' : 'w';
+    var target = st._pos.board[C.mTo(m)];
+    var fromP = st._pos.board[C.mFrom(m)];
+    var isEp = fromP && (fromP & 7) === 1 && (C.mFrom(m) & 7) !== (C.mTo(m) & 7) && !target;
+    st._pos.makeMove(m);
+    var ns = makeState(st._pos);
+    ns.history = (st.history || []).slice();
+    ns.capturedWhite = (st.capturedWhite || []).slice();
+    ns.capturedBlack = (st.capturedBlack || []).slice();
+    if (target || isEp) {
+      // capturedX — трофеи игрока X (взяте им фигуры соперника)
+      var cap = { type: target ? pType(target) : 'P', color: moverColor === 'w' ? 'b' : 'w' };
+      (moverColor === 'w' ? ns.capturedWhite : ns.capturedBlack).push(cap);
+    }
+    if (window.__CHVSC_ON_MOVE && !window.__CHVSC_SUPPRESS && mv && mv.from !== undefined) {
+      try { window.__CHVSC_ON_MOVE(mv); } catch (e) { console.warn('[vsc] hook error', e); }
+    }
+    return ns;
+  }
+
+  function toFEN(st) { return st._fen; }
+
+  function getStatus(st) {
+    ensurePos(st);
+    if (!st._legal.length) {
+      if (st._pos.inCheck()) return { status: 'checkmate', winner: st.turn === 'w' ? 'b' : 'w' };
+      return { status: 'stalemate' };
+    }
+    if ((st._pos.half || 0) >= 100) return { status: 'draw', reason: 'fifty-move' };
+    if (st._pos.insufficientMaterial && st._pos.insufficientMaterial()) return { status: 'draw', reason: 'insufficient-material' };
+    var cnt = {}, fens = [st._fen], i;
+    for (i = 0; i < (st.history || []).length; i++) if (st.history[i] && st.history[i].fen) fens.push(st.history[i].fen);
+    for (i = 0; i < fens.length; i++) {
+      var k = fens[i].split(' ').slice(0, 4).join(' ');
+      cnt[k] = (cnt[k] || 0) + 1;
+      if (cnt[k] >= 3) return { status: 'draw', reason: 'threefold-repetition' };
+    }
+    return { status: 'active' };
+  }
+
+  function findKing(st, color) {
+    for (var i = 0; i < 64; i++) {
+      var p = st.board[i];
+      if (p && p.type === 'K' && p.color === color) return i;
+    }
+    return -1;
+  }
+  function opposite(c) { return c === 'w' ? 'b' : 'w'; }
+
+  function isAttacked(st, sq, by) {
+    var b = st.board, r = (sq / 8) | 0, f = sq % 8, i, rr, ff, p;
+    // пешки
+    var pr = by === 'w' ? r - 1 : r + 1;
+    if (pr >= 0 && pr < 8) {
+      if (f > 0 && (p = b[pr * 8 + f - 1]) && p.type === 'P' && p.color === by) return true;
+      if (f < 7 && (p = b[pr * 8 + f + 1]) && p.type === 'P' && p.color === by) return true;
+    }
+    // кони
+    var KN = [[1,2],[2,1],[2,-1],[1,-2],[-1,-2],[-2,-1],[-2,1],[-1,2]];
+    for (i = 0; i < 8; i++) {
+      rr = r + KN[i][0]; ff = f + KN[i][1];
+      if (rr >= 0 && rr < 8 && ff >= 0 && ff < 8 && (p = b[rr * 8 + ff]) && p.type === 'N' && p.color === by) return true;
+    }
+    // король
+    var KG = [[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]];
+    for (i = 0; i < 8; i++) {
+      rr = r + KG[i][0]; ff = f + KG[i][1];
+      if (rr >= 0 && rr < 8 && ff >= 0 && ff < 8 && (p = b[rr * 8 + ff]) && p.type === 'K' && p.color === by) return true;
+    }
+    // линейные фигуры
+    var dirs = [[1,0,'RQ'],[-1,0,'RQ'],[0,1,'RQ'],[0,-1,'RQ'],[1,1,'BQ'],[1,-1,'BQ'],[-1,1,'BQ'],[-1,-1,'BQ']];
+    for (i = 0; i < 8; i++) {
+      rr = r + dirs[i][0]; ff = f + dirs[i][1];
+      while (rr >= 0 && rr < 8 && ff >= 0 && ff < 8) {
+        p = b[rr * 8 + ff];
+        if (p) {
+          if (p.color === by && dirs[i][2].indexOf(p.type) >= 0) return true;
+          break;
+        }
+        rr += dirs[i][0]; ff += dirs[i][1];
+      }
+    }
+    return false;
+  }
+
+  window.ChessEngine = {
+    START_FEN: C.START_FEN,
+    parseFEN: parseFEN,
+    deepClone: deepClone,
+    legalMoves: legalMoves,
+    applyMove: applyMove,
+    toSAN: toSAN,
+    toFEN: toFEN,
+    getStatus: getStatus,
+    findKing: findKing,
+    isAttacked: isAttacked,
+    opposite: opposite
+  };
+})();
+</script>
+
+<script src="js/board.js"></script>
+
+<script>
+/* ВАЖНО: board.js объявляет компонент через `const chessBoard` — глобальная const
+   НЕ становится свойством window, поэтому публикуем её вручную.
+   Без этого bridжа страница видит window.chessBoard === undefined и ошибочно
+   считает, что js/board.js не найден. */
+(function () {
+  try {
+    window.chessBoard = chessBoard;
+    window.__CH_BOARD_ERR = '';
+  } catch (e) {
+    window.chessBoard = undefined;
+    window.__CH_BOARD_ERR = (e && e.message) || 'ошибка при загрузке';
+    console.error('[vsc] js/board.js найден, но упал при инициализации:', e && e.message);
+    if (!window.CHCore) console.error('[vsc] js/vs-computer-core.js не загрузился (CHCore) — без него board.js не стартует.');
+    if (!window.ChessEngine) console.error('[vsc] Адаптер ChessEngine не создан — board.js не сможет работать.');
+  }
+})();
+</script>
+
+<script>
+(function () {
+  'use strict';
+  var C = window.CHCore;
+  var chessBoard = window.chessBoard;
   var WHITE = 0, BLACK = 1;
   var TCH = { 1: 'P', 2: 'N', 3: 'B', 4: 'R', 5: 'Q', 6: 'K' };
-  // Фигуры — те же SVG, что и на остальном сайте (/js/pieces.js → PIECE_IMGS)
-  function pieceSrc(type, color) { return (window.PIECE_IMGS || {})[(color ? 'b' : 'w') + TCH[type]] || ('/img/pieces/' + (color ? 'b' : 'w') + TCH[type] + '.svg'); }
+  // Мини-SVG-хелперы для полосок игроков (те же SVG, что и на остальном сайте)
+  function pieceSrc(type, color) { return (window.PIECE_IMGS || {})[(color ? 'b' : 'w') + TCH[type]] || ('img/pieces/' + (color ? 'b' : 'w') + TCH[type] + '.svg'); }
   function pieceImg(type, color, cls) { return '<img class="' + (cls || 'pc') + '" src="' + pieceSrc(type, color) + '" alt="" draggable="false">'; }
 
   // ─────────────────────────────────────────────────────────────────────────
   //  НАСТРОЙКА: где лежит Stockfish 16 (WASM).
-  //  Пути перебираются по очереди; сработает первый, что загрузится.
-  //  Если у вас другой путь — задайте до загрузки страницы:
-  //     window.CH_STOCKFISH_URLS = ['/ваш/путь/stockfish-nnue-16-single.js'];
-  //  или просто впишите его первым в этот список.
   // ─────────────────────────────────────────────────────────────────────────
   var SF_URLS = (window.CH_STOCKFISH_URLS && window.CH_STOCKFISH_URLS.length) ? window.CH_STOCKFISH_URLS : [
-    '/js/stockfish.js',   // тот же файл, что использует страница анализа (stockfish-ui.js)
-    '/js/vendor/stockfish/stockfish-nnue-16-single.js',
-    '/js/stockfish/stockfish-nnue-16-single.js',
-    '/js/vendor/stockfish-nnue-16-single.js',
-    '/js/stockfish-nnue-16-single.js',
-    '/js/vendor/stockfish.js'
+    'js/stockfish.js',
+    'js/vendor/stockfish/stockfish-nnue-16-single.js',
+    'js/stockfish/stockfish-nnue-16-single.js',
+    'js/vendor/stockfish-nnue-16-single.js',
+    'js/stockfish-nnue-16-single.js',
+    'js/vendor/stockfish.js'
   ];
-  var CORE_URL = '/js/vs-computer-core.js'; // тот же файл крутится в Web Worker для своих ботов
+  var CORE_URL = 'js/vs-computer-core.js'; // тот же файл крутится в Web Worker для своих ботов
 
   var TIME_CONTROLS = [
     { group: 'Пуля',  items: [{ id: '1+0', base: 60, inc: 0 }, { id: '2+1', base: 120, inc: 1 }] },
@@ -324,7 +548,7 @@
     { group: 'Своя',  items: [{ id: 'inf', base: 0, inc: 0, label: '∞ Без часов' }] }
   ];
 
-  // Мини-дебютная книга: чтобы партии не начинались одинаково. Ключ — ходы партии через пробел.
+  // Мини-дебютная книга: чтобы партии не начинались одинаково.
   var BOOK = {
     '': ['e2e4', 'd2d4', 'g1f3', 'c2c4'],
     'e2e4': ['e7e5', 'c7c5', 'e7e6', 'c7c6'],
@@ -366,271 +590,118 @@
   var G = null;      // текущая партия (null — пока не начата)
   var token = 0;     // меняется при новой партии/отмене, чтобы отбросить «запоздавшие» ответы бота
   var flipped = false, previewColor = WHITE;
-  var sel = null, drag = null, pendingPromo = null;
   var userName = 'Вы';
   try { var cu = JSON.parse(localStorage.getItem('ch_user') || 'null'); if (cu && cu.username) userName = cu.username; } catch (e) {}
 
-  // ── Доска ─────────────────────────────────────────────────────────────────
-  var boardEl = $('#vsc-board'), sqEls = [];
-  for (var bi = 0; bi < 64; bi++) { var d = document.createElement('div'); d.className = 'sq'; boardEl.appendChild(d); sqEls.push(d); }
-  var viewPos = new C.Position();
+  // Общая доска board.js знает про socket/currentUser — этой странице они не нужны
+  window.socket = null;
+  window.currentUser = { username: userName };
 
-  function bottomColor() { return flipped ? (G ? G.human ^ 1 : previewColor ^ 1) : (G ? G.human : previewColor); }
-
-  function layoutBoard() {
-    var bottom = bottomColor();
-    for (var i = 0; i < 64; i++) {
-      var row = Math.floor(i / 8), col = i % 8, rank, file;
-      if (bottom === WHITE) { rank = 7 - row; file = col; } else { rank = row; file = 7 - col; }
-      var el = sqEls[i];
-      el.dataset.sq = rank * 16 + file;
-      el.dataset.base = ((rank + file) & 1) ? 'light' : 'dark';
-      el.dataset.r = col === 0 ? (rank + 1) : '';
-      el.dataset.f = row === 7 ? 'abcdefgh'[file] : '';
-    }
+  // ── Конвертеры ходов UCI ↔ {from,to,promotion} (0..63) ────────────────────
+  function uciToObj(u) {
+    var ff = u.charCodeAt(0) - 97, fr = u.charCodeAt(1) - 49;
+    var tf = u.charCodeAt(2) - 97, tr = u.charCodeAt(3) - 49;
+    var o = { from: fr * 8 + ff, to: tr * 8 + tf };
+    if (u.length > 4) o.promotion = u.charAt(4).toUpperCase();
+    return o;
+  }
+  function objToUci(mv) {
+    var u = 'abcdefgh'.charAt(mv.from % 8) + (Math.floor(mv.from / 8) + 1) +
+            'abcdefgh'.charAt(mv.to % 8) + (Math.floor(mv.to / 8) + 1);
+    if (mv.promotion) u += mv.promotion.toLowerCase();
+    return u;
   }
 
   function curFen() { return G ? G.fens[G.view] : C.START_FEN; }
   function isLive() { return G && G.view === G.fens.length - 1; }
-  function canMove() {
-    return G && !G.over && isLive() && G.pos.side === G.human && !pendingPromo && !G.thinking;
+
+  // ── Синхронизация общей доски с G ─────────────────────────────────────────
+  // Полная пересборка позиции доски из истории ходов (идемпотентно).
+  function resyncBoard(ply) {
+    if (!chessBoard || !G) return;
+    var n = (ply === undefined ? G.view : ply);
+    var data = { moves: G.moves.slice(0, n).map(uciToObj) };
+    if (G.clocks) { data.whiteTime = G.clocks[WHITE] / 1000; data.blackTime = G.clocks[BLACK] / 1000; }
+    chessBoard.resyncFromServer(data);
   }
-  function legalFrom(sq) {
-    var out = [];
-    for (var i = 0; i < G.legal.length; i++) if (C.mFrom(G.legal[i]) === sq) out.push(G.legal[i]);
-    return out;
+  // То же, но с подавленным хуком; если пользователь смотрел историю — возвращаем его назад.
+  function resyncSuppressed(ply) {
+    if (!chessBoard || !G) return;
+    window.__CHVSC_SUPPRESS = true;
+    try {
+      resyncBoard(ply);
+      if (G.view < G.fens.length - 1) chessBoard.gotoMove(G.view);
+    } finally { window.__CHVSC_SUPPRESS = false; }
   }
 
-  function render() {
-    layoutBoard();
-    viewPos.setFEN(curFen());
-    var last = G ? G.lastMoves[G.view] : null;
-    var targets = {};
-    if (sel !== null && canMove()) {
-      legalFrom(sel).forEach(function (m) { targets[C.mTo(m)] = true; });
+  // ── Ход человека пришёл с общей доски (вызывается адаптером ChessEngine) ──
+  function onBoardMove(mv) {
+    if (!G || G.over || !isLive() || G.thinking || G.pos.side !== G.human) {
+      if (G) setTimeout(function () { resyncSuppressed(); }, 0); // откатываем доску к живой позиции
+      return;
     }
-    var kingSq = viewPos.inCheck() ? viewPos.kingSq[viewPos.side] : -1;
-    var interactive = canMove();
-    boardEl.classList.toggle('interactive', !!interactive);
-    for (var i = 0; i < 64; i++) {
-      var el = sqEls[i], sq = +el.dataset.sq, p = viewPos.board[sq];
-      var cls = 'sq ' + el.dataset.base;
-      if (last && (sq === last[0] || sq === last[1])) cls += ' last';
-      if (sel === sq) cls += ' sel';
-      if (sq === kingSq) cls += ' check';
-      if (interactive && p && (p >> 3) === G.human) cls += ' mine';
-      if (drag && drag.active && drag.from === sq) cls += ' drag-src';
-      el.className = cls;
-      var html = '';
-      if (p) html += pieceImg(p & 7, p >> 3);
-      if (targets[sq]) html += p ? '<span class="capm"></span>' : '<span class="dotm"></span>';
-      el.innerHTML = html;
-    }
-    renderStrips();
-    renderMoves();
-  }
-
-  // ── Взятые фигуры / материал ──────────────────────────────────────────────
-  var START_COUNT = { 1: 8, 2: 2, 3: 2, 4: 2, 5: 1 };
-  var PVAL = { 1: 1, 2: 3, 3: 3, 4: 5, 5: 9 };
-  function captured() {
-    var cnt = [{ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }];
-    for (var sq = 0; sq < 128; sq++) {
-      if (sq & 0x88) { sq += 7; continue; }
-      var p = viewPos.board[sq]; if (!p) continue;
-      var t = p & 7; if (t === 6) continue;
-      cnt[p >> 3][t]++;
-    }
-    var res = [[], []], score = [0, 0];
-    for (var c = 0; c < 2; c++) {
-      for (var t2 = 5; t2 >= 1; t2--) {
-        var missing = Math.max(0, START_COUNT[t2] - cnt[c][t2]);
-        for (var k = 0; k < missing; k++) { res[c ^ 1].push(t2); score[c ^ 1] += PVAL[t2]; }
-      }
-    }
-    return { list: res, diff: score[0] - score[1] };
-  }
-
-  // ── Полоски игроков, часы ─────────────────────────────────────────────────
-  function botInfo() { return C.BOTS[G ? G.botId : settings.bot]; }
-  function colorOfBot() { return G ? G.human ^ 1 : previewColor ^ 1; }
-  function humanColor() { return G ? G.human : previewColor; }
-
-  function renderStrips() {
-    var bottom = bottomColor(), top = bottom ^ 1;
-    var bot = botInfo(), botCol = colorOfBot();
-    var cap = captured();
-    [[top, 'top'], [bottom, 'bot']].forEach(function (pair) {
-      var color = pair[0], id = pair[1];
-      var isBot = color === botCol;
-      $('#' + id + '-name').textContent = isBot ? bot.icon + ' ' + bot.name : userName;
-      $('#' + id + '-level').textContent = isBot ? bot.level : '';
-      var html = cap.list[color].map(function (t) { return pieceImg(t, color ^ 1, 'pc-c'); }).join('');
-      var adv = color === WHITE ? cap.diff : -cap.diff;
-      if (adv > 0) html += '<span class="adv">+' + adv + '</span>';
-      $('#' + id + '-cap').innerHTML = html;
-      var ck = $('#' + id + '-clock');
-      ck.hidden = !(G && G.clocks);
-      ck.dataset.color = color;
-    });
-    updateClocks();
-  }
-
-  function fmt(ms) {
-    if (ms < 0) ms = 0;
-    var s = Math.ceil(ms / 1000);
-    if (ms < 10000) return '0:' + (ms / 1000).toFixed(1).padStart(4, '0');
-    var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
-    return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(ss).padStart(2, '0');
-  }
-  function updateClocks() {
-    ['top', 'bot'].forEach(function (id) {
-      var ck = $('#' + id + '-clock');
-      if (ck.hidden || !G || !G.clocks) return;
-      var color = +ck.dataset.color, ms = G.clocks[color];
-      ck.textContent = fmt(ms);
-      ck.classList.toggle('active', clockRunning() && G.pos.side === color);
-      ck.classList.toggle('low', ms < 10000);
-    });
-  }
-  function clockRunning() { return G && G.clocks && !G.over && G.moves.length >= 2 && G.running; }
-
-  var tickTimer = setInterval(function () {
-    if (!clockRunning()) return;
-    var now = performance.now(), el = now - G.lastTs; G.lastTs = now;
-    var side = G.pos.side;
-    G.clocks[side] -= el;
-    if (G.clocks[side] <= 0) { G.clocks[side] = 0; updateClocks(); onFlag(side); return; }
-    updateClocks();
-  }, 100);
-
-  function onFlag(side) {
-    var winner = side ^ 1;
-    if (!G.pos.canMate(winner)) finish('1/2-1/2', 'Время вышло, но у соперника недостаточно материала — ничья');
-    else finish(winner === WHITE ? '1-0' : '0-1', side === G.human ? 'У вас закончилось время' : 'У соперника закончилось время');
-  }
-
-  // ── Список ходов ──────────────────────────────────────────────────────────
-  function renderMoves() {
-    var box = $('#moves');
-    if (!G || !G.sans.length) { box.innerHTML = '<div class="empty">Ходов пока нет</div>'; return; }
-    var h = '';
-    for (var i = 0; i < G.sans.length; i += 2) {
-      h += '<div class="no">' + (i / 2 + 1) + '.</div>';
-      h += '<div class="mv' + (G.view === i + 1 ? ' cur' : '') + '" data-v="' + (i + 1) + '">' + esc(G.sans[i]) + '</div>';
-      h += G.sans[i + 1] ? '<div class="mv' + (G.view === i + 2 ? ' cur' : '') + '" data-v="' + (i + 2) + '">' + esc(G.sans[i + 1]) + '</div>' : '<div></div>';
-    }
-    box.innerHTML = h;
-    var cur = box.querySelector('.cur');
-    if (cur) cur.scrollIntoView({ block: 'nearest' });
-    else if (G.view === G.fens.length - 1) box.scrollTop = box.scrollHeight;
-  }
-  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
-
-  function setStatus(text, cls) {
-    var el = $('#status'); el.textContent = text; el.className = 'vsc-status' + (cls ? ' ' + cls : '');
-  }
-  function refreshStatus() {
-    if (!G || G.over) return;
-    var bot = botInfo();
-    if (G.pos.side === G.human) setStatus((G.pos.inCheck() ? 'Шах! ' : '') + 'Ваш ход (' + (G.human === WHITE ? 'белые' : 'чёрные') + ')');
-    else setStatus(bot.name + ' думает…', 'think');
-  }
-
-  // ── Взаимодействие: клики и перетаскивание ───────────────────────────────
-  boardEl.addEventListener('pointerdown', function (e) {
-    if (e.button !== undefined && e.button > 0) return;
-    var el = e.target.closest('.sq'); if (!el || !canMove()) return;
-    var sq = +el.dataset.sq, p = G.pos.board[sq];
-    if (sel !== null) {
-      var cand = legalFrom(sel).filter(function (m) { return C.mTo(m) === sq; });
-      if (cand.length) { tryMove(sel, sq); return; }
-    }
-    if (p && (p >> 3) === G.human) {
-      var wasSel = sel === sq;
-      sel = sq;
-      drag = { from: sq, x: e.clientX, y: e.clientY, active: false, wasSel: wasSel, ghost: null };
-      render();
-    } else { sel = null; render(); }
-  });
-  window.addEventListener('pointermove', function (e) {
-    if (!drag) return;
-    if (!drag.active) {
-      if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) < 8) return;
-      drag.active = true;
-      var p = G.pos.board[drag.from];
-      var g = document.createElement('img');
-      g.className = 'vsc-ghost'; g.src = pieceSrc(p & 7, p >> 3); g.draggable = false;
-      g.style.width = g.style.height = (boardEl.clientWidth / 8 * 0.95) + 'px';
-      document.body.appendChild(g); drag.ghost = g;
-      render();
-    }
-    drag.ghost.style.left = e.clientX + 'px'; drag.ghost.style.top = e.clientY + 'px';
-  });
-  window.addEventListener('pointerup', function (e) {
-    if (!drag) return;
-    var dr = drag; drag = null;
-    if (dr.ghost) dr.ghost.remove();
-    if (dr.active) {
-      var under = document.elementFromPoint(e.clientX, e.clientY);
-      var tel = under && under.closest ? under.closest('.sq') : null;
-      if (tel && canMove()) {
-        var to = +tel.dataset.sq;
-        if (legalFrom(dr.from).some(function (m) { return C.mTo(m) === to; })) { tryMove(dr.from, to); return; }
-      }
-      sel = null; render();
-    } else if (dr.wasSel) { sel = null; render(); }
-  });
-  window.addEventListener('pointercancel', function () { if (drag) { if (drag.ghost) drag.ghost.remove(); drag = null; render(); } });
-
-  function tryMove(from, to) {
-    var cand = legalFrom(from).filter(function (m) { return C.mTo(m) === to; });
-    if (!cand.length) return;
-    if (cand.length > 1) { openPromo(cand); return; }
-    sel = null;
-    playMove(cand[0]);
-  }
-
-  function openPromo(cands) {
-    pendingPromo = cands;
-    var box = $('#vsc-promo-box'); box.innerHTML = '';
-    [5, 4, 3, 2].forEach(function (t) {
-      var m = cands.filter(function (x) { return C.mPromo(x) === t; })[0]; if (!m) return;
-      var b = document.createElement('button');
-      b.type = 'button'; b.innerHTML = pieceImg(t, G.human, 'pcp');
-      b.onclick = function (ev) { ev.stopPropagation(); closePromo(); sel = null; playMove(m); };
-      box.appendChild(b);
-    });
-    $('#vsc-promo').classList.add('open');
-  }
-  function closePromo() { pendingPromo = null; $('#vsc-promo').classList.remove('open'); }
-  $('#vsc-promo').addEventListener('click', function () { closePromo(); sel = null; render(); });
-
-  // ── Ход ───────────────────────────────────────────────────────────────────
-  function playMove(m) {
-    var mover = G.pos.side;
+    var uci = objToUci(mv);
+    var m = G.pos.parseUci(uci, G.legal);
+    if (!m) { setTimeout(function () { resyncSuppressed(); }, 0); return; }
     var san = G.pos.sanOf(m, G.legal);
-    // время: списываем потраченное и добавляем прибавку
-    if (G.clocks) {
-      if (G.running && G.moves.length >= 2) {
-        var now = performance.now(); G.clocks[mover] -= now - G.lastTs; G.lastTs = now;
-        if (G.clocks[mover] <= 0) { G.clocks[mover] = 0; updateClocks(); onFlag(mover); return; }
-        G.clocks[mover] += G.inc * 1000;
+    humanMove(m, uci, san);
+  }
+  window.__CHVSC_ON_MOVE = onBoardMove;
+
+  // ── Ход человека: книга учёта партии (доска уже показала ход) ─────────────
+  function humanMove(m, uci, san) {
+    var mover = G.pos.side;
+    if (G.clocks && G.running && G.moves.length >= 2) {
+      var now = performance.now(); G.clocks[mover] -= now - G.lastTs; G.lastTs = now;
+      if (G.clocks[mover] <= 0) {
+        G.clocks[mover] = 0; updateClocks();
+        setTimeout(function () { resyncSuppressed(); }, 0); // убираем «лишний» ход с доски
+        onFlag(mover); return;
       }
+      G.clocks[mover] += G.inc * 1000;
     }
     var from = C.mFrom(m), to = C.mTo(m);
     G.pos.makeMove(m);
-    G.moves.push(C.moveToUci(m)); G.sans.push(san);
+    G.moves.push(uci); G.sans.push(san);
     G.fens.push(G.pos.getFEN()); G.lastMoves.push([from, to]);
     G.view = G.fens.length - 1;
     G.legal = G.pos.legalMoves();
     var key = G.pos.repetitionKey(); G.reps[key] = (G.reps[key] || 0) + 1;
     if (G.clocks) { G.running = true; G.lastTs = performance.now(); }
-    sel = null;
     if (!checkEnd()) {
       render(); refreshStatus();
       if (G.pos.side !== G.human) botMove();
     }
+  }
+
+  // ── Ход бота: книга учёта + показ на общей доске ──────────────────────────
+  function applyBotMove(m) {
+    var mover = G.pos.side, san = G.pos.sanOf(m, G.legal);
+    if (G.clocks && G.running && G.moves.length >= 2) {
+      var now = performance.now(); G.clocks[mover] -= now - G.lastTs; G.lastTs = now;
+      if (G.clocks[mover] <= 0) { G.clocks[mover] = 0; updateClocks(); onFlag(mover); return; }
+      G.clocks[mover] += G.inc * 1000;
+    }
+    var from = C.mFrom(m), to = C.mTo(m), uci = C.moveToUci(m);
+    G.pos.makeMove(m);
+    G.moves.push(uci); G.sans.push(san);
+    G.fens.push(G.pos.getFEN()); G.lastMoves.push([from, to]);
+    G.view = G.fens.length - 1;
+    G.legal = G.pos.legalMoves();
+    var key = G.pos.repetitionKey(); G.reps[key] = (G.reps[key] || 0) + 1;
+    if (G.clocks) { G.running = true; G.lastTs = performance.now(); }
+    if (chessBoard) {
+      window.__CHVSC_SUPPRESS = true;
+      try {
+        // доска в живой позиции до хода бота → просто играем ход (со звуком),
+        // иначе пересобираем целиком
+        var canPlay = chessBoard.history.length === G.moves.length - 1;
+        if (canPlay) { if (!chessBoard.playUCI(uci)) resyncBoard(); }
+        else resyncBoard();
+        chessBoard.clearPremove();
+      } finally { window.__CHVSC_SUPPRESS = false; }
+    }
+    if (!checkEnd()) { render(); refreshStatus(); }
   }
 
   function checkEnd() {
@@ -652,12 +723,12 @@
     if (G.over) return;
     G.over = true; G.result = result; G.thinking = false; token++;
     abortBot();
+    if (chessBoard) { try { chessBoard.clearPremove(); } catch (e) {} }
     var humanWon = (result === '1-0' && G.human === WHITE) || (result === '0-1' && G.human === BLACK);
     var draw = result === '1/2-1/2';
     var head = draw ? '🤝 Ничья' : (humanWon ? '🏆 Вы победили!' : '😔 Вы проиграли');
     setStatus(head + ' — ' + reason, draw ? 'draw' : (humanWon ? 'win' : 'lose'));
     $('#actions-live').hidden = true; $('#actions-over').hidden = false;
-    sel = null; closePromo();
     render();
   }
 
@@ -770,7 +841,6 @@
     if (!G || G.over || G.thinking) return;
     var my = token; G.thinking = true;
     var bot = botInfo(), t0 = performance.now(), uci = null, botColor = G.human ^ 1;
-    renderBoardInteractivityOnly();
     try {
       uci = bookMove();
       if (!uci) {
@@ -794,9 +864,136 @@
     G.thinking = false;
     var m = uci ? G.pos.parseUci(uci, G.legal) : 0;
     if (!m) m = G.legal[Math.floor(Math.random() * G.legal.length)]; // страховка
-    playMove(m);
+    applyBotMove(m);
   }
-  function renderBoardInteractivityOnly() { boardEl.classList.remove('interactive'); }
+
+  // ── Взятые фигуры / материал ──────────────────────────────────────────────
+  var viewPos = new C.Position();
+  var START_COUNT = { 1: 8, 2: 2, 3: 2, 4: 2, 5: 1 };
+  var PVAL = { 1: 1, 2: 3, 3: 3, 4: 5, 5: 9 };
+  function captured() {
+    var cnt = [{ 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }, { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }];
+    for (var sq = 0; sq < 128; sq++) {
+      if (sq & 0x88) { sq += 7; continue; }
+      var p = viewPos.board[sq]; if (!p) continue;
+      var t = p & 7; if (t === 6) continue;
+      cnt[p >> 3][t]++;
+    }
+    var res = [[], []], score = [0, 0];
+    for (var c = 0; c < 2; c++) {
+      for (var t2 = 5; t2 >= 1; t2--) {
+        var missing = Math.max(0, START_COUNT[t2] - cnt[c][t2]);
+        for (var k = 0; k < missing; k++) { res[c ^ 1].push(t2); score[c ^ 1] += PVAL[t2]; }
+      }
+    }
+    return { list: res, diff: score[0] - score[1] };
+  }
+
+  // ── Полоски игроков, часы ─────────────────────────────────────────────────
+  function botInfo() { return C.BOTS[G ? G.botId : settings.bot]; }
+  function colorOfBot() { return G ? G.human ^ 1 : previewColor ^ 1; }
+  function humanColor() { return G ? G.human : previewColor; }
+  function bottomColor() { return flipped ? (G ? G.human ^ 1 : previewColor ^ 1) : (G ? G.human : previewColor); }
+
+  function render() {
+    viewPos.setFEN(curFen());
+    renderStrips();
+    renderMoves();
+  }
+
+  function renderStrips() {
+    var bottom = bottomColor(), top = bottom ^ 1;
+    var bot = botInfo(), botCol = colorOfBot();
+    var cap = captured();
+    [[top, 'top'], [bottom, 'bot']].forEach(function (pair) {
+      var color = pair[0], id = pair[1];
+      var isBot = color === botCol;
+      $('#' + id + '-name').textContent = isBot ? bot.icon + ' ' + bot.name : userName;
+      $('#' + id + '-level').textContent = isBot ? bot.level : '';
+      var html = cap.list[color].map(function (t) { return pieceImg(t, color ^ 1, 'pc-c'); }).join('');
+      var adv = color === WHITE ? cap.diff : -cap.diff;
+      if (adv > 0) html += '<span class="adv">+' + adv + '</span>';
+      $('#' + id + '-cap').innerHTML = html;
+      var ck = $('#' + id + '-clock');
+      ck.hidden = !(G && G.clocks);
+      ck.dataset.color = color;
+    });
+    updateClocks();
+  }
+
+  function fmt(ms) {
+    if (ms < 0) ms = 0;
+    var s = Math.ceil(ms / 1000);
+    if (ms < 10000) return '0:' + (ms / 1000).toFixed(1).padStart(4, '0');
+    var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+    return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(ss).padStart(2, '0');
+  }
+  function updateClocks() {
+    ['top', 'bot'].forEach(function (id) {
+      var ck = $('#' + id + '-clock');
+      if (ck.hidden || !G || !G.clocks) return;
+      var color = +ck.dataset.color, ms = G.clocks[color];
+      ck.textContent = fmt(ms);
+      ck.classList.toggle('active', clockRunning() && G.pos.side === color);
+      ck.classList.toggle('low', ms < 10000);
+    });
+  }
+  function clockRunning() { return G && G.clocks && !G.over && G.moves.length >= 2 && G.running; }
+
+  var tickTimer = setInterval(function () {
+    if (!clockRunning()) return;
+    var now = performance.now(), el = now - G.lastTs; G.lastTs = now;
+    var side = G.pos.side;
+    G.clocks[side] -= el;
+    if (G.clocks[side] <= 0) { G.clocks[side] = 0; updateClocks(); onFlag(side); return; }
+    updateClocks();
+  }, 100);
+
+  function onFlag(side) {
+    var winner = side ^ 1;
+    if (!G.pos.canMate(winner)) finish('1/2-1/2', 'Время вышло, но у соперника недостаточно материала — ничья');
+    else finish(winner === WHITE ? '1-0' : '0-1', side === G.human ? 'У вас закончилось время' : 'У соперника закончилось время');
+  }
+
+  // ── Список ходов ──────────────────────────────────────────────────────────
+  function renderMoves() {
+    var box = $('#moves');
+    if (!G || !G.sans.length) { box.innerHTML = '<div class="empty">Ходов пока нет</div>'; return; }
+    var h = '';
+    for (var i = 0; i < G.sans.length; i += 2) {
+      h += '<div class="no">' + (i / 2 + 1) + '.</div>';
+      h += '<div class="mv' + (G.view === i + 1 ? ' cur' : '') + '" data-v="' + (i + 1) + '">' + esc(G.sans[i]) + '</div>';
+      h += G.sans[i + 1] ? '<div class="mv' + (G.view === i + 2 ? ' cur' : '') + '" data-v="' + (i + 2) + '">' + esc(G.sans[i + 1]) + '</div>' : '<div></div>';
+    }
+    box.innerHTML = h;
+    // Автоскролл — ТОЛЬКО внутри контейнера списка ходов.
+    // scrollIntoView() прокручивает всех прокручиваемых предков, включая сам
+    // документ: на телефоне страница при каждом ходе сама уезжала вниз,
+    // чтобы показать элемент текущего хода. Прокручиваем
+    // getBoundingClientRect-ами только #moves — страница не трогается
+    // (тот же подход, что и в board.js для .moves-list).
+    var cur = box.querySelector('.cur');
+    if (cur) {
+      var cd = cur.getBoundingClientRect(), bd = box.getBoundingClientRect();
+      if (cd.top < bd.top) box.scrollTop += cd.top - bd.top;
+      else if (cd.bottom > bd.bottom) box.scrollTop += cd.bottom - bd.bottom;
+      if (cd.left < bd.left) box.scrollLeft += cd.left - bd.left;
+      else if (cd.right > bd.right) box.scrollLeft += cd.right - bd.right;
+    } else if (G.view === G.fens.length - 1) {
+      box.scrollTop = box.scrollHeight;
+    }
+  }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+  function setStatus(text, cls) {
+    var el = $('#status'); el.textContent = text; el.className = 'vsc-status' + (cls ? ' ' + cls : '');
+  }
+  function refreshStatus() {
+    if (!G || G.over) return;
+    var bot = botInfo();
+    if (G.pos.side === G.human) setStatus((G.pos.inCheck() ? 'Шах! ' : '') + 'Ваш ход (' + (G.human === WHITE ? 'белые' : 'чёрные') + ')');
+    else setStatus(bot.name + ' думает…', 'think');
+  }
 
   // ── Старт / управление партией ───────────────────────────────────────────
   function showError(html) { var e = $('#setup-error'); e.innerHTML = html; e.classList.add('show'); }
@@ -816,6 +1013,9 @@
       }
       btn.disabled = false; btn.textContent = 'Начать игру';
     }
+    if (!chessBoard) { showError('Общая доска не подключена: ' + (window.__CH_BOARD_ERR
+      ? 'js/board.js загрузился с ошибкой — <code>' + window.__CH_BOARD_ERR + '</code>'
+      : 'не загрузился <code>js/board.js</code>') + '. Подробности — в консоли браузера (F12).'); return; }
     var tc = findTc(settings.tc);
     var human = forceHuman !== undefined ? forceHuman : (settings.color === 'w' ? WHITE : settings.color === 'b' ? BLACK : (Math.random() < 0.5 ? WHITE : BLACK));
     abortBot(); token++;
@@ -828,7 +1028,20 @@
     };
     G.legal = G.pos.legalMoves();
     G.reps[G.pos.repetitionKey()] = 1;
-    flipped = false; sel = null; drag = null; closePromo();
+    flipped = human === BLACK;
+    // ── передаём партию общей доске ──
+    window.currentUser = { username: userName };
+    window.__CHVSC_SUPPRESS = true;
+    try {
+      chessBoard.startGame({
+        gameId: 'vsc-' + Date.now(),
+        color: human === WHITE ? 'white' : 'black',
+        opponent: bot.name,
+        timeControl: tc.base ? tc.id : '10+0'
+      });
+      chessBoard.clearAnnotations();
+      if (chessBoard.flipped !== flipped) chessBoard.flipBoard();
+    } finally { window.__CHVSC_SUPPRESS = false; }
     $('#panel-setup').hidden = true; $('#panel-game').hidden = false;
     $('#actions-live').hidden = false; $('#actions-over').hidden = true;
     $('#btn-undo').hidden = !!G.clocks;
@@ -839,16 +1052,30 @@
 
   function toSetup() {
     abortBot(); token++;
-    G = null; sel = null; closePromo();
-    previewColor = settings.color === 'b' ? BLACK : WHITE; flipped = false;
+    G = null;
+    previewColor = settings.color === 'b' ? BLACK : WHITE;
+    flipped = previewColor === BLACK;
+    if (chessBoard) {
+      window.__CHVSC_SUPPRESS = true;
+      try {
+        chessBoard.clearPremove(); chessBoard.clearAnnotations();
+        chessBoard.resyncFromServer({ moves: [] }); // сброс к начальной позиции
+        if (chessBoard.flipped !== flipped) chessBoard.flipBoard();
+      } catch (e) { try { chessBoard.newLocalGame(); } catch (e2) {} }
+      finally { window.__CHVSC_SUPPRESS = false; }
+    }
     $('#panel-game').hidden = true; $('#panel-setup').hidden = false;
     render();
   }
 
   $('#btn-start').onclick = function () { startGame(); };
   $('#btn-newgame').onclick = toSetup;
-  $('#btn-rematch').onclick = function () { startGame(G.human ^ 1); };
-  $('#btn-flip').onclick = $('#btn-flip2').onclick = function () { flipped = !flipped; render(); };
+  $('#btn-rematch').onclick = function () { if (G) startGame(G.human ^ 1); };
+  $('#btn-flip').onclick = $('#btn-flip2').onclick = function () {
+    flipped = !flipped;
+    if (chessBoard) { try { chessBoard.flipBoard(); } catch (e) {} }
+    render();
+  };
 
   var resignTimer = null;
   $('#btn-resign').onclick = function () {
@@ -876,15 +1103,23 @@
     G.moves.length = len; G.sans.length = len; G.fens.length = len + 1; G.lastMoves.length = len + 1;
     G.pos.setFEN(G.fens[len]); G.view = len; G.legal = G.pos.legalMoves();
     G.reps = {}; G.fens.forEach(function (f) { var k = f.split(' ').slice(0, 4).join(' '); G.reps[k] = (G.reps[k] || 0) + 1; });
-    sel = null; render(); refreshStatus();
+    if (chessBoard) {
+      window.__CHVSC_SUPPRESS = true;
+      try { chessBoard.clearPremove(); resyncBoard(len); }
+      finally { window.__CHVSC_SUPPRESS = false; }
+    }
+    render(); refreshStatus();
   }
 
-  // Навигация по ходам
+  // Навигация по ходам (доска листается своим gotoMove — ввод при просмотре
+  // истории сам блокируется внутри board.js)
   function goView(v) {
     if (!G) return;
     v = Math.max(0, Math.min(G.fens.length - 1, v));
     if (v === G.view) return;
-    G.view = v; sel = null; render();
+    G.view = v;
+    if (chessBoard) { try { chessBoard.gotoMove(v); } catch (e) {} }
+    render();
   }
   $('#nav-first').onclick = function () { if (G) goView(0); };
   $('#nav-prev').onclick = function () { if (G) goView(G.view - 1); };
@@ -934,7 +1169,7 @@
       btn.innerHTML = '<span class="vsc-bot-ic">' + b.icon + '</span>' +
         '<span class="vsc-bot-main"><span class="vsc-bot-name">' + esc(b.name) + '<span class="vsc-bot-lvl">' + esc(b.level) + '</span></span>' +
         '<span class="vsc-bot-desc">' + esc(b.desc) + '</span></span><span class="vsc-dots">' + dots + '</span>';
-      btn.onclick = function () { settings.bot = id; saveSettings(); syncSetupUi(); render(); clearError(); };
+      btn.onclick = function () { settings.bot = id; saveSettings(); syncSetupUi(); clearError(); };
       bots.appendChild(btn);
     });
     var tcs = $('#tcs'); tcs.innerHTML = '';
@@ -952,7 +1187,10 @@
     document.querySelectorAll('#colors .vsc-color').forEach(function (b) {
       b.onclick = function () {
         settings.color = b.dataset.c; saveSettings(); syncSetupUi();
-        previewColor = settings.color === 'b' ? BLACK : WHITE; flipped = false; render();
+        previewColor = settings.color === 'b' ? BLACK : WHITE;
+        flipped = previewColor === BLACK;
+        if (chessBoard && chessBoard.flipped !== flipped) { try { chessBoard.flipBoard(); } catch (e) {} }
+        render();
       };
     });
     syncSetupUi();
@@ -965,8 +1203,30 @@
 
   // ── Запуск ────────────────────────────────────────────────────────────────
   previewColor = settings.color === 'b' ? BLACK : WHITE;
+  flipped = previewColor === BLACK;
   buildSetup();
   render();
+
+  if (chessBoard) {
+    try { chessBoard.newLocalGame(); } // стартовая позиция на общей доске
+    catch (e) { try { chessBoard.render(); } catch (e2) {} }
+    if (chessBoard.flipped !== flipped) { try { chessBoard.flipBoard(); } catch (e) {} }
+  } else {
+    showError('Общая доска не подключена: ' + (window.__CH_BOARD_ERR
+      ? 'js/board.js загрузился с ошибкой — <code>' + window.__CH_BOARD_ERR + '</code>'
+      : 'не загрузился <code>js/board.js</code> — страница должна лежать в папке <code>public</code>, рядом с папкой <code>js</code>') + '. Подробности — в консоли браузера (F12).');
+  }
+
+  // Ширина колонки доски = ширина #chess-board (board.js сам задаёт размер)
+  var vscEl = document.querySelector('.vsc');
+  function fitBoardWidth() {
+    var b = document.getElementById('chess-board');
+    if (b && b.offsetWidth) vscEl.style.setProperty('--bs', b.offsetWidth + 'px');
+  }
+  document.addEventListener('board:render', fitBoardWidth);
+  window.addEventListener('resize', fitBoardWidth);
+  setTimeout(fitBoardWidth, 60);
+  setTimeout(fitBoardWidth, 400);
 
 })();
 </script>
