@@ -26,9 +26,16 @@ module.exports = function registerGames(socket) {
       socket.emit('move_rejected', { gameId, reason: 'invalid' });
       return;
     }
-    if (move.promotion != null && !['q', 'r', 'b', 'n'].includes(move.promotion)) {
-      socket.emit('move_rejected', { gameId, reason: 'invalid' });
-      return;
+    // Превращение: клиент (ChessEngine.verboseToMove) шлёт фигуру в ВЕРХНЕМ
+    // регистре ('Q'/'R'/'B'/'N'), chess.js на сервере ожидает строчную ('q').
+    // Нормализуем ДО проверки — иначе любое превращение отбрасывалось как
+    // invalid, даже не дойдя до проверки легальности.
+    if (move.promotion != null) {
+      move.promotion = String(move.promotion).toLowerCase();
+      if (!['q', 'r', 'b', 'n'].includes(move.promotion)) {
+        socket.emit('move_rejected', { gameId, reason: 'invalid' });
+        return;
+      }
     }
     if (game.white !== socket.username && game.black !== socket.username) return;
     const pc = game.white === socket.username ? 'white' : 'black';
