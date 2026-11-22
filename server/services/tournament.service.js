@@ -284,6 +284,7 @@ function startTournamentGame(tournament, p1, p2) {
   const bs = core.findSocketByUsername(black);
   if (ws) ws.emit('game_start', payload('white', black, bR));
   if (bs) bs.emit('game_start', payload('black', white, wR));
+  gameService.sendHeadToHead(game);
   saveTournament(tournament).catch(() => {});
   core.io.to(`tournament_${tournament.id}`).emit('tournament_update', sanitizeTournament(tournament));
 }

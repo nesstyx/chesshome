@@ -33,6 +33,44 @@ function isUserInGame(username) {
   return false;
 }
 
+// ── Личные встречи ───────────────────────────────────────────────────────
+// Счёт между двумя игроками по таблице games (учитываются все записанные партии:
+// обычные, товарищеские и турнирные). Клиент рисует плашку под доской:
+// последние H2H_RECENT результатов, текущая партия и общий счёт.
+// h2h_data: { gameId, a, b, games, aPts, bPts, recent:[очки a: 1 | 0.5 | 0, старые→новые] }
+const H2H_RECENT = 20;
+
+async function getHeadToHead(a, b) {
+  const pair = "((white = $1 AND black = $2) OR (white = $2 AND black = $1))";
+  const agg = await db(
+    "SELECT" +
+    " COUNT(*) FILTER (WHERE (white = $1 AND result = 'white') OR (black = $1 AND result = 'black'))::int AS a_wins," +
+    " COUNT(*) FILTER (WHERE (white = $2 AND result = 'white') OR (black = $2 AND result = 'black'))::int AS b_wins," +
+    " COUNT(*) FILTER (WHERE result = 'draw')::int AS draws" +
+    " FROM games WHERE " + pair, [a, b]);
+  const last = await db(
+    "SELECT white, result FROM games WHERE " + pair +
+    " AND result IN ('white','black','draw') ORDER BY ended_at DESC LIMIT " + H2H_RECENT, [a, b]);
+  const r = (agg.rows && agg.rows[0]) || {};
+  const aWins = r.a_wins || 0, bWins = r.b_wins || 0, draws = r.draws || 0;
+  const recent = last.rows.slice().reverse().map(g =>
+    g.result === 'draw' ? 0.5 : ((g.result === 'white') === (g.white === a) ? 1 : 0));
+  return { games: aWins + bWins + draws, aPts: aWins + draws / 2, bPts: bWins + draws / 2, recent };
+}
+
+// Без onlySocket — обоим игрокам (старт партии); с onlySocket — одному (реджойн).
+async function sendHeadToHead(game, onlySocket) {
+  try {
+    const h = await getHeadToHead(game.white, game.black);
+    const payload = Object.assign({ gameId: game.id, a: game.white, b: game.black }, h);
+    if (onlySocket) { onlySocket.emit('h2h_data', payload); return; }
+    const core = require('../core');
+    [core.findSocketByUsername(game.white), core.findSocketByUsername(game.black)]
+      .forEach(sk => { if (sk) sk.emit('h2h_data', payload); });
+  } catch (e) { console.warn('[h2h]', e.message); }
+}
+// ── /Личные встречи ──────────────────────────────────────────────────────
+
 // ── Присутствие в партии ─────────────────────────────────────────────────
 // Игрок «в игре», пока жив хотя бы один его сокет, который эту партию знает
 // (получил game_start или сделал rejoin_game). Пропал последний такой сокет →
@@ -156,7 +194,7 @@ async function endGameAuthoritative(gameId, game, result, reason) {
   }
   const core = require('../core');
   // rematch: true — клиент показывает кнопку «Реванш» (см. rematchPool выше)
-  const payload = { gameId, result, reason, white: game.white, black: game.black, rematch: canRematch };
+  const payload = { gameId, result, reason, white: game.white, black: game.black, rematch: canRematch, recorded: hasFullMove(game) };
   [core.findSocketByUsername(game.white), core.findSocketByUsername(game.black)].forEach(s => s?.emit('game_ended', payload));
 }
 
@@ -346,6 +384,7 @@ function startGame(acceptorSocket, challenge) {
   const startPayload = { gameId, timeControl: game.timeControl, rated, serverAt: Date.now(), lastMoveAt: game.lastMoveAt, firstMoveDeadline: game.firstMoveDeadline, whiteTime: game.whiteTime, blackTime: game.blackTime };
   if (ws) ws.emit('game_start', { ...startPayload, color: 'white', opponent: black, opponentRating: bR });
   if (bs) bs.emit('game_start', { ...startPayload, color: 'black', opponent: white, opponentRating: wR });
+  sendHeadToHead(game);
 }
 
 
@@ -576,6 +615,7 @@ Object.assign(module.exports, {
   rematchPool,
   REMATCH_OFFER_TTL,
   isUserInGame,
+  sendHeadToHead,
   markUserInGame,
   onSocketDisconnect,
   presencePayload,

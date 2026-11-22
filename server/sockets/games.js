@@ -4,6 +4,7 @@ const {
   activeGames,
   pendingChallenges,
   isUserInGame,
+  sendHeadToHead,
   presencePayload,
   CLAIM_VICTORY_AFTER_MS,
   rematchPool,
@@ -34,6 +35,7 @@ module.exports = function registerGames(socket) {
       if (oppSock) oppSock.emit('opponent_presence', { gameId, online: true });
     }
     socket.emit('opponent_presence', presencePayload(gameId, game, oppColor));
+    sendHeadToHead(game, socket);   // счёт личных встреч для плашки под доской
   });
 
   socket.on('make_move', ({ gameId, move }) => {

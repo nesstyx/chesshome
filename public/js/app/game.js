@@ -100,6 +100,7 @@ function showTournamentReturnBanner(tournamentId, tournamentName, isInterclub) {
 
 function startGameUI(data) {
   _currentGameData = data; // сохраняем для реджойн-баннера при уходе со страницы
+  h2hReset();              // счёт личных встреч придёт отдельным событием h2h_data
   presenceReset();         // новая партия — оба кружка зелёные, баннер ухода скрыт
   rematchReset();          // новая партия (в т.ч. реванш) — прячем плашки реванша и окно результата
   document.getElementById('modal-game-result')?.classList.remove('open');
@@ -300,6 +301,14 @@ document.addEventListener('click', (e) => {
 // когда можно объявить победу); показываем баннер с отсчётом и кнопкой.
 let _presActive = false, _presGameId = null, _presTimer = null, _presClaimAt = 0;
 
+// Событие относится к текущей партии? Сразу после game_start chessBoard.gameId ещё старый
+// (доска стартует через 100 мс), поэтому сначала смотрим на _currentGameData.
+function _isCurrentGameId(id) {
+  let cur = null;
+  try { cur = (_currentGameData && _currentGameData.gameId) || (typeof chessBoard !== 'undefined' && chessBoard.gameId) || null; } catch (e) {}
+  return !cur || id === cur;
+}
+
 function _presStyle() {
   if (document.getElementById('presence-style')) return;
   const st = document.createElement('style');
@@ -376,9 +385,7 @@ function presenceSetMine(online) {
 
 function presenceOnOpponent(d) {
   if (!d) return;
-  let cur = null;
-  try { cur = (typeof chessBoard !== 'undefined' && chessBoard.gameId) || (_currentGameData && _currentGameData.gameId) || null; } catch (e) {}
-  if (cur && d.gameId !== cur) return;
+  if (!_isCurrentGameId(d.gameId)) return;
   _presStyle();
   _presActive = true; _presGameId = d.gameId;
   _presSet('bottom', !socket || socket.connected !== false);
@@ -399,4 +406,106 @@ function presenceClaim() {
 function presenceOnGameEnded() {
   _presHideBanner();
   _presActive = false;
+}
+
+// ЛИЧНЫЕ ВСТРЕЧИ (счёт под доской)
+// Сервер присылает h2h_data: { gameId, a, b, games, aPts, bPts, recent:[очки a, старые→новые] }.
+// Рисуем плашку под нижним игроком: по строке на каждого — последние результаты
+// (1 / ½ / 0), колонка текущей партии (• пока идёт, по окончании — результат) и общий счёт.
+// Верхняя строка — соперник, нижняя — мы (как на доске).
+let _h2h = null;
+
+function _h2hStyle() {
+  if (document.getElementById('h2h-style')) return;
+  const st = document.createElement('style');
+  st.id = 'h2h-style';
+  st.textContent = `
+    .h2h-strip{margin-top:10px;width:100%;box-sizing:border-box;background:var(--bg-card);
+      border:1px solid var(--border);border-radius:12px;padding:8px 12px;font-family:var(--font-body)}
+    .h2h-caption{font-size:11px;color:var(--text-muted);margin-bottom:6px;letter-spacing:.2px}
+    .h2h-row{display:flex;align-items:center;gap:10px;height:26px}
+    .h2h-row + .h2h-row{margin-top:2px}
+    .h2h-cells{flex:1;min-width:0;display:flex;justify-content:flex-end;overflow:hidden}
+    .h2h-c{flex:0 0 22px;text-align:center;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+    .h2h-w{color:#3fb950}.h2h-l{color:#5b6270}.h2h-d{color:#c9ccd3}
+    .h2h-cur{flex:0 0 32px;height:24px;line-height:24px;text-align:center;font-size:14px;font-weight:800;
+      border-radius:6px;background:rgba(201,168,76,.16);border:1px solid var(--accent);color:var(--accent)}
+    .h2h-cur.h2h-w{color:#3fb950}.h2h-cur.h2h-l{color:#8b93a1}.h2h-cur.h2h-d{color:#e6e8ec}
+    .h2h-name{flex:0 1 150px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+      font-size:13px;color:var(--text-primary)}
+    .h2h-pts{flex:0 0 44px;text-align:right;font-size:14px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--text-secondary)}
+    .h2h-pts.lead{color:#3fb950}.h2h-pts.trail{color:#f85149}
+    @media (max-width:520px){.h2h-name{flex-basis:90px}.h2h-c{flex-basis:20px}}
+  `;
+  document.head.appendChild(st);
+}
+
+function _h2hFmt(p) {
+  const w = Math.floor(p);
+  return p % 1 ? (w ? String(w) : '') + '½' : String(w);
+}
+
+function _h2hCell(sc) {
+  return sc === 1 ? '<span class="h2h-c h2h-w">1</span>'
+       : sc === 0.5 ? '<span class="h2h-c h2h-d">½</span>'
+       : '<span class="h2h-c h2h-l">0</span>';
+}
+
+function h2hReset() {
+  _h2h = null;
+  document.getElementById('h2h-strip')?.remove();
+}
+
+function h2hRender() {
+  const d = _h2h;
+  const me = currentUser && currentUser.username;
+  if (!d || !me || (d.a !== me && d.b !== me)) return;
+  const area = document.querySelector('#page-game .board-area');
+  if (!area) return;
+  _h2hStyle();
+  let strip = document.getElementById('h2h-strip');
+  if (!strip) {
+    strip = document.createElement('div');
+    strip.id = 'h2h-strip';
+    strip.className = 'h2h-strip';
+    area.appendChild(strip);            // последним — под нижним игроком
+  }
+  const meIsA = d.a === me;
+  const persp = sc => meIsA ? sc : 1 - sc;
+  const mine = d.recent.map(persp);
+  const curMine = d.cur == null ? null : persp(d.cur);
+  const myPts  = (meIsA ? d.aPts : d.bPts) + (curMine == null ? 0 : curMine);
+  const oppPts = (meIsA ? d.bPts : d.aPts) + (curMine == null ? 0 : 1 - curMine);
+  const games  = d.games + (curMine == null ? 0 : 1);
+  const caption = games === 0
+    ? T('game.h2h_first', '⚔️ Первая встреча между вами')
+    : T('game.h2h_caption', '⚔️ Личные встречи · всего партий: {n}').replace('{n}', games);
+  const curCell = (sc) => sc == null
+    ? `<div class="h2h-cur" title="${T('game.h2h_current', 'Текущая партия')}">•</div>`
+    : `<div class="h2h-cur ${sc === 1 ? 'h2h-w' : sc === 0.5 ? 'h2h-d' : 'h2h-l'}">${sc === 1 ? '1' : sc === 0.5 ? '½' : '0'}</div>`;
+  const row = (name, cells, cur, pts, other) =>
+    `<div class="h2h-row">
+       <div class="h2h-cells">${cells.map(_h2hCell).join('')}</div>
+       ${curCell(cur)}
+       <div class="h2h-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+       <div class="h2h-pts ${pts > other ? 'lead' : pts < other ? 'trail' : ''}">${_h2hFmt(pts)}</div>
+     </div>`;
+  const oppName = meIsA ? d.b : d.a;
+  strip.innerHTML =
+    `<div class="h2h-caption">${caption}</div>` +
+    row(oppName, mine.map(x => 1 - x), curMine == null ? null : 1 - curMine, oppPts, myPts) +
+    row(me, mine, curMine, myPts, oppPts);
+}
+
+function h2hOnData(d) {
+  if (!d || !Array.isArray(d.recent) || !_isCurrentGameId(d.gameId)) return;
+  _h2h = Object.assign({ cur: null }, d);
+  h2hRender();
+}
+
+function h2hOnGameEnded(data) {
+  if (!_h2h || !data || data.gameId !== _h2h.gameId || !data.recorded) return;
+  if (data.white !== _h2h.a && data.white !== _h2h.b) return;
+  _h2h.cur = data.result === 'draw' ? 0.5 : ((data.result === 'white') === (data.white === _h2h.a) ? 1 : 0);
+  h2hRender();
 }

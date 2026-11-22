@@ -297,6 +297,7 @@ function connectSocket() {
     chessBoard.onGameEnded(data);
     if (typeof rematchOnGameEnded === 'function') rematchOnGameEnded(data);
     if (typeof presenceOnGameEnded === 'function') presenceOnGameEnded(data);
+    if (typeof h2hOnGameEnded === 'function') h2hOnGameEnded(data);
     // После турнирной партии — показываем кнопку возврата
     if (tId) {
       setTimeout(() => showTournamentReturnBanner(tId, tName, tIsInterclub), 800);
@@ -307,6 +308,8 @@ function connectSocket() {
   });
   // Присутствие соперника в партии (кружки у ников, «объявить победу») — /js/app/game.js
   socket.on('opponent_presence', d => presenceOnOpponent(d));
+  // Счёт личных встреч под доской — /js/app/game.js
+  socket.on('h2h_data', d => h2hOnData(d));
   // Реванш (логика и разметка — в /js/app/game.js)
   socket.on('rematch_sent',        d => rematchOnSent(d));
   socket.on('rematch_offered',     d => rematchOnOffered(d));
