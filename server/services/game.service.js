@@ -33,6 +33,68 @@ function isUserInGame(username) {
   return false;
 }
 
+// ── Присутствие в партии ─────────────────────────────────────────────────
+// Игрок «в игре», пока жив хотя бы один его сокет, который эту партию знает
+// (получил game_start или сделал rejoin_game). Пропал последний такой сокет →
+// через PRESENCE_GRACE_MS сопернику уходит opponent_presence {online:false}
+// (серый кружок), а ещё через CLAIM_VICTORY_AFTER_MS с момента ухода он может
+// объявить победу (claim_victory → endGameAuthoritative(..., 'abandoned')).
+// Короткий разрыв (перезагрузка страницы, переподключение) серым не мигает.
+const CLAIM_VICTORY_AFTER_MS = 30 * 1000;
+const PRESENCE_GRACE_MS      = 3 * 1000;
+
+function markUserInGame(username, gameId) {
+  const core = require('../core');
+  const ids = core.usernameToSocketId.get(String(username).toLowerCase());
+  if (!ids) return;
+  for (const id of ids) {
+    const sock = core.io.sockets.sockets.get(id);
+    if (!sock) continue;
+    if (!sock._gameIds) sock._gameIds = new Set();
+    sock._gameIds.add(gameId);
+  }
+}
+
+function presencePayload(gameId, game, color) {
+  const since = game._away && game._away[color];
+  if (!since) return { gameId, online: true };
+  return {
+    gameId, online: false, awaySince: since, claimAfterMs: CLAIM_VICTORY_AFTER_MS,
+    claimIn: Math.max(0, since + CLAIM_VICTORY_AFTER_MS - Date.now()),
+  };
+}
+
+function onSocketDisconnect(socket) {
+  if (!socket._gameIds || !socket._gameIds.size || !socket.username) return;
+  const core = require('../core');
+  const low = socket.username.toLowerCase();
+  for (const gameId of socket._gameIds) {
+    const game = activeGames.get(gameId);
+    if (!game) continue;
+    const color = game.white === socket.username ? 'white' : game.black === socket.username ? 'black' : null;
+    if (!color) continue;
+    let stillIn = false;
+    const ids = core.usernameToSocketId.get(low);
+    if (ids) {
+      for (const id of ids) {
+        if (id === socket.id) continue;
+        const other = core.io.sockets.sockets.get(id);
+        if (other && other._gameIds && other._gameIds.has(gameId)) { stillIn = true; break; }
+      }
+    }
+    if (stillIn) continue;
+    if (!game._away) game._away = {};
+    if (game._away[color]) continue;
+    const since = Date.now();
+    game._away[color] = since;
+    setTimeout(() => {
+      if (activeGames.get(gameId) !== game || !game._away || game._away[color] !== since) return; // вернулся или партия закончилась
+      const opp = core.findSocketByUsername(color === 'white' ? game.black : game.white);
+      if (opp) opp.emit('opponent_presence', presencePayload(gameId, game, color));
+    }, PRESENCE_GRACE_MS);
+  }
+}
+
 const REMATCH_OFFER_TTL = 2 * 60 * 1000;
 const rematchPool       = new Map();
 setInterval(() => {
@@ -277,6 +339,7 @@ function startGame(acceptorSocket, challenge) {
     _board: serverChess.startBoard(), rated,
   };
   activeGames.set(gameId, game);
+  markUserInGame(white, gameId); markUserInGame(black, gameId);
   const wR = core.usersCache.get(white.toLowerCase())?.rating ?? '?';
   const bR = core.usersCache.get(black.toLowerCase())?.rating ?? '?';
   const ws = core.findSocketByUsername(white); const bs = core.findSocketByUsername(black);
@@ -513,6 +576,10 @@ Object.assign(module.exports, {
   rematchPool,
   REMATCH_OFFER_TTL,
   isUserInGame,
+  markUserInGame,
+  onSocketDisconnect,
+  presencePayload,
+  CLAIM_VICTORY_AFTER_MS,
   FRIENDLY_FIRST_MOVE_TIMEOUT,
   serverChess,
 });

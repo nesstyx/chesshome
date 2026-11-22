@@ -160,7 +160,11 @@ function tryPairTournamentPlayers(tournament) {
   if (getTournamentStatus(tournament, now) !== 'active') return;
   const waiting = tournament.participants.filter(p =>
     p.waiting && !p.left && !p.currentGameId && !p.anticheatBanned &&
-    (!p.nextEligibleAt || now >= p.nextEligibleAt)
+    (!p.nextEligibleAt || now >= p.nextEligibleAt) &&
+    // Игрок, который сейчас в обычной (не турнирной) партии, в пару не берётся:
+    // клиент ведёт только одну онлайн-партию. Останется в waiting и будет сопарен
+    // тиком (каждые 3 с), как только освободится.
+    !gameService.isUserInGame(p.username)
   );
   if (waiting.length < 2) return;
 
@@ -263,6 +267,7 @@ function startTournamentGame(tournament, p1, p2) {
   };
   gameService.activeGames.set(gameId, game);
   gameService.tournamentGames.set(gameId, game);
+  gameService.markUserInGame(white, gameId); gameService.markUserInGame(black, gameId);
   p1.currentGameId = gameId; p2.currentGameId = gameId;
   const payload = (color, opp, oppRating) => ({
     gameId, color, opponent: opp, opponentRating: oppRating,

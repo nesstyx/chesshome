@@ -4,6 +4,8 @@ const {
   activeGames,
   pendingChallenges,
   isUserInGame,
+  presencePayload,
+  CLAIM_VICTORY_AFTER_MS,
   rematchPool,
   startGame,
   endGameAuthoritative,
@@ -20,6 +22,18 @@ module.exports = function registerGames(socket) {
     if (!game || (game.white !== socket.username && game.black !== socket.username)) return;
     game._board = serverChess.rebuildBoard(game.moves);
     socket.emit('rejoin_ack', { gameId, moves: game.moves, turn: game.turn, whiteTime: game.whiteTime, blackTime: game.blackTime, chatMessages: game.chatMessages || [] });
+    // Присутствие: этот сокет теперь «сидит» в партии; если игрок числился ушедшим —
+    // возвращаем его и говорим сопернику; самому присланному — текущий статус соперника.
+    if (!socket._gameIds) socket._gameIds = new Set();
+    socket._gameIds.add(gameId);
+    const myColor  = game.white === socket.username ? 'white' : 'black';
+    const oppColor = myColor === 'white' ? 'black' : 'white';
+    if (game._away && game._away[myColor]) {
+      delete game._away[myColor];
+      const oppSock = findSocketByUsername(game[oppColor]);
+      if (oppSock) oppSock.emit('opponent_presence', { gameId, online: true });
+    }
+    socket.emit('opponent_presence', presencePayload(gameId, game, oppColor));
   });
 
   socket.on('make_move', ({ gameId, move }) => {
@@ -225,6 +239,20 @@ module.exports = function registerGames(socket) {
     if (game.chatMessages.length > 100) game.chatMessages.shift();
     socket.emit('game_chat', msg);
     const os = findSocketByUsername(opp); if (os) os.emit('game_chat', msg);
+  });
+
+  // Соперник вышел из партии — через CLAIM_VICTORY_AFTER_MS после ухода можно объявить победу.
+  socket.on('claim_victory', async ({ gameId } = {}) => {
+    if (!socket.username || typeof gameId !== 'string') return;
+    const game = activeGames.get(gameId); if (!game) return;
+    if (game.white !== socket.username && game.black !== socket.username) return;
+    const mine = game.white === socket.username ? 'white' : 'black';
+    const theirs = mine === 'white' ? 'black' : 'white';
+    const since = game._away && game._away[theirs];
+    if (!since) return socket.emit('error', 'Соперник в игре — победу объявить нельзя');
+    const wait = since + CLAIM_VICTORY_AFTER_MS - Date.now();
+    if (wait > 0) return socket.emit('error', 'Подождите ещё ' + Math.ceil(wait / 1000) + ' с');
+    await endGameAuthoritative(gameId, game, mine, 'abandoned');
   });
 
   // ── Реванш ──────────────────────────────────────────────────────────────

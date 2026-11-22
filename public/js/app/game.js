@@ -100,6 +100,7 @@ function showTournamentReturnBanner(tournamentId, tournamentName, isInterclub) {
 
 function startGameUI(data) {
   _currentGameData = data; // сохраняем для реджойн-баннера при уходе со страницы
+  presenceReset();         // новая партия — оба кружка зелёные, баннер ухода скрыт
   rematchReset();          // новая партия (в т.ч. реванш) — прячем плашки реванша и окно результата
   document.getElementById('modal-game-result')?.classList.remove('open');
   // Небольшая задержка — даём challenges_update отработать первым
@@ -290,3 +291,112 @@ document.addEventListener('click', (e) => {
   const btn = e.target.closest && e.target.closest('[data-rm]');
   if (btn) rematchAction(btn.dataset.rm, btn);
 });
+
+// ПРИСУТСТВИЕ В ПАРТИИ
+// Зелёный кружок рядом с ником — игрок в партии, серый — вышел (закрыл вкладку, пропала
+// связь). Кружки рисуются псевдоэлементом ::before на .player-name, поэтому не страдают
+// от перезаписи текста ника. Верхний ник — соперник, нижний — мы.
+// Когда соперник вышел, сервер присылает opponent_presence с claimIn (мс до момента,
+// когда можно объявить победу); показываем баннер с отсчётом и кнопкой.
+let _presActive = false, _presGameId = null, _presTimer = null, _presClaimAt = 0;
+
+function _presStyle() {
+  if (document.getElementById('presence-style')) return;
+  const st = document.createElement('style');
+  st.id = 'presence-style';
+  st.textContent = `
+    .player-name.pres-on::before,.player-name.pres-off::before{content:'';display:inline-block;width:9px;height:9px;
+      border-radius:50%;margin-right:7px;vertical-align:middle;transition:background .3s,box-shadow .3s}
+    .player-name.pres-on::before{background:#3fb950;box-shadow:0 0 6px rgba(63,185,80,.65)}
+    .player-name.pres-off::before{background:#6b7280;box-shadow:none}
+    @keyframes presUp{from{opacity:0;transform:translateX(-50%) translateY(24px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+  `;
+  document.head.appendChild(st);
+}
+
+function _presSet(which, online) {
+  const el = document.getElementById('player-' + which + '-name');
+  if (!el) return;
+  el.classList.toggle('pres-on', !!online);
+  el.classList.toggle('pres-off', !online);
+  el.title = online ? T('game.presence_online', 'В игре') : T('game.presence_offline', 'Вышел из игры');
+}
+
+function _presHideBanner() {
+  clearInterval(_presTimer); _presTimer = null;
+  document.getElementById('opp-away-banner')?.remove();
+}
+
+function _presShowBanner(claimAt) {
+  _presClaimAt = claimAt;
+  let b = document.getElementById('opp-away-banner');
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'opp-away-banner';
+    Object.assign(b.style, {
+      position:'fixed', bottom:'28px', left:'50%', transform:'translateX(-50%)',
+      background:'var(--bg-card)', border:'2px solid var(--accent)', borderRadius:'16px',
+      padding:'14px 20px', display:'flex', alignItems:'center', gap:'14px',
+      boxShadow:'0 8px 48px rgba(0,0,0,0.7)', zIndex:'9998', maxWidth:'92vw',
+      fontFamily:'var(--font-body)', animation:'presUp 0.4s cubic-bezier(0.34,1.56,0.64,1)'
+    });
+    b.innerHTML = `<div style="font-size:24px">🔌</div>
+      <div id="opp-away-text" style="font-size:14px;color:var(--text-primary);font-weight:600"></div>
+      <button id="opp-away-btn" class="btn btn-primary" onclick="presenceClaim()" disabled style="white-space:nowrap">🏆 ${T('game.claim_victory', 'Объявить победу')}</button>`;
+    document.body.appendChild(b);
+  }
+  clearInterval(_presTimer);
+  const tick = () => {
+    const left = Math.ceil((_presClaimAt - Date.now()) / 1000);
+    const txt = document.getElementById('opp-away-text');
+    const btn = document.getElementById('opp-away-btn');
+    if (!txt || !btn) return;
+    if (left > 0) {
+      txt.textContent = T('game.opp_left_wait', 'Соперник вышел из игры. Объявить победу можно через {n} с').replace('{n}', left);
+      btn.disabled = true;
+    } else {
+      txt.textContent = T('game.opp_left_ready', 'Соперник вышел из игры. Вы можете объявить победу');
+      btn.disabled = false;
+    }
+  };
+  tick();
+  _presTimer = setInterval(tick, 1000);
+}
+
+function presenceReset() {
+  _presStyle();
+  _presActive = true; _presGameId = null;
+  _presSet('top', true); _presSet('bottom', true);
+  _presHideBanner();
+}
+
+function presenceSetMine(online) {
+  if (_presActive) _presSet('bottom', online);
+}
+
+function presenceOnOpponent(d) {
+  if (!d) return;
+  let cur = null;
+  try { cur = (typeof chessBoard !== 'undefined' && chessBoard.gameId) || (_currentGameData && _currentGameData.gameId) || null; } catch (e) {}
+  if (cur && d.gameId !== cur) return;
+  _presStyle();
+  _presActive = true; _presGameId = d.gameId;
+  _presSet('bottom', !socket || socket.connected !== false);
+  const wasAway = !!document.getElementById('opp-away-banner');
+  _presSet('top', !!d.online);
+  if (d.online) {
+    _presHideBanner();
+    if (wasAway && typeof toast === 'function') toast('🟢 ' + T('game.opp_back', 'Соперник вернулся в игру'), 'info');
+  } else {
+    _presShowBanner(Date.now() + (d.claimIn || 0));
+  }
+}
+
+function presenceClaim() {
+  if (socket && _presGameId) socket.emit('claim_victory', { gameId: _presGameId });
+}
+
+function presenceOnGameEnded() {
+  _presHideBanner();
+  _presActive = false;
+}
