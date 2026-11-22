@@ -1180,6 +1180,7 @@ const chessBoard = (() => {
         agreement: T('game.by_agreement', 'По соглашению'),
         anticheat_admin: T('game.anticheat_admin', 'Ваш соперник заблокирован за использование читов'),
         anticheat: T('game.anticheat', 'Заблокирован за использование читов'),
+        abandoned: win ? T('game.opponent_abandoned', 'Соперник покинул игру') : T('game.you_abandoned', 'Вы покинули игру'),
       };
       reasonText = reasons[data.reason] || drawReasonText(data.reason) || '';
     }

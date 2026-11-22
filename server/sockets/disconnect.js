@@ -6,10 +6,12 @@ const {
   sessions,
   usernameToSocketId,
   onlineUsers,
+  onSocketDisconnect,
 } = require('../core');
 
 module.exports = function registerDisconnect(socket) {
   socket.on('disconnect', () => {
+    onSocketDisconnect(socket); // серый кружок у соперника / «объявить победу» (game.service.js)
     const sess = sessions.get(socket.id);
     if (sess) {
       sessions.delete(socket.id);

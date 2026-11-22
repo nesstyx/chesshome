@@ -93,6 +93,10 @@ const {
   rematchPool,
   REMATCH_OFFER_TTL,
   isUserInGame,
+  markUserInGame,
+  onSocketDisconnect,
+  presencePayload,
+  CLAIM_VICTORY_AFTER_MS,
   serverChess,
 } = gameService;
 
@@ -1155,6 +1159,10 @@ Object.assign(module.exports, {
   rematchPool,
   REMATCH_OFFER_TTL,
   isUserInGame,
+  markUserInGame,
+  onSocketDisconnect,
+  presencePayload,
+  CLAIM_VICTORY_AFTER_MS,
   serverChess,
   limiterSocketConnect,
   main,

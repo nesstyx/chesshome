@@ -215,8 +215,12 @@ function connectSocket() {
   socket.on('connect', () => {
     _socketAuthed = false; // на реконнекте ждём новое auth_ok заново
     socket.emit('auth'); // токен сервер берёт из HttpOnly cookie в handshake
+    if (typeof presenceSetMine === 'function') presenceSetMine(true);
   });
-  socket.on('disconnect', () => { _socketAuthed = false; });
+  socket.on('disconnect', () => {
+    _socketAuthed = false;
+    if (typeof presenceSetMine === 'function') presenceSetMine(false);
+  });
   socket.on('auth_ok', () => {
     _socketAuthed = true;
     flushPendingGlobalMsgs();
@@ -292,6 +296,7 @@ function connectSocket() {
     document.getElementById('pending-t-banner')?.remove();
     chessBoard.onGameEnded(data);
     if (typeof rematchOnGameEnded === 'function') rematchOnGameEnded(data);
+    if (typeof presenceOnGameEnded === 'function') presenceOnGameEnded(data);
     // После турнирной партии — показываем кнопку возврата
     if (tId) {
       setTimeout(() => showTournamentReturnBanner(tId, tName, tIsInterclub), 800);
@@ -300,6 +305,8 @@ function connectSocket() {
   socket.on('draw_offered', ({ from }) => {
     if (confirm(from + ' предлагает ничью. Принять?')) socket.emit('accept_draw', { gameId: chessBoard.gameId });
   });
+  // Присутствие соперника в партии (кружки у ников, «объявить победу») — /js/app/game.js
+  socket.on('opponent_presence', d => presenceOnOpponent(d));
   // Реванш (логика и разметка — в /js/app/game.js)
   socket.on('rematch_sent',        d => rematchOnSent(d));
   socket.on('rematch_offered',     d => rematchOnOffered(d));
