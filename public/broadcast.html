@@ -1,16 +1,18 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<script src="/js/utils.js"></script>
-<script src="/js/toast.js"></script>
-<script src="/js/api.js"></script>
-<script src="/js/pieces.js"></script>
-<script src="/js/vendor/chess.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Трансляция — Chess Home</title>
   <meta name="description" content="Трансляция шахматной партии в реальном времени">
   <link rel="stylesheet" href="/css/main.css">
+  <script src="/js/utils.js"></script>
+  <script src="/js/toast.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/pieces.js"></script>
+  <script src="/js/vendor/chess.js"></script>
+  <script src="/js/chess-engine.js"></script>
+  <script src="/js/board.js"></script>
   <script src="/js/header/core.js"></script>
   <script src="/js/header/styles.js"></script>
   <script src="/js/header/render.js"></script>
@@ -20,7 +22,7 @@
 <style>
   body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-body); margin: 0; }
 
-  .bc-page { max-width: 1140px; margin: 0 auto; padding: 20px 20px 50px; }
+  .bc-page { max-width: 1400px; margin: 0 auto; padding: 20px 20px 50px; }
 
   /* ── шапка партии ─────────────────────────────────────── */
   .bc-topline { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -34,7 +36,6 @@
   .bc-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 10px 0 18px; }
   .bc-name {
     font-family: var(--font-display); font-size: 26px; font-weight: 700; letter-spacing: -0.3px;
-    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .bc-badge {
     flex: none; font-size: 11px; font-weight: 700; padding: 5px 14px; border-radius: 20px;
@@ -51,15 +52,43 @@
     border-radius: 8px; padding: 7px 10px; font-size: 13px; max-width: 260px; font-family: var(--font-body);
   }
 
-  /* ── раскладка ────────────────────────────────────────── */
-  .bc-layout { display: flex; gap: 18px; align-items: flex-start; }
-  .bc-board-col { flex: 1; min-width: 0; }
+  /* ── раскладка как на странице анализа ────────────────── */
+  .bc-layout { display: flex; gap: 22px; align-items: flex-start; justify-content: center; }
+  .bc-chat-col { width: 280px; flex: none; display: flex; flex-direction: column; }
+  .bc-chat-col .bc-chat { flex: 1; }
+  .bc-board-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: stretch; }
+  .bc-side { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 300px; max-width: 380px; }
+
+  .board-row { display: flex; gap: 10px; align-items: stretch; }
+
+  /* доска из /js/board.js задаёт размер инлайном — не даём вылезти
+     за пределы нашей колонки (в анализе колонка шире) */
+  .board-wrapper { width: 100%; display: block; }
+  #chess-board { max-width: 100% !important; height: auto !important; aspect-ratio: 1 / 1; margin: 0 auto; }
+
+  .eval-bar-container {
+    position: relative; display: flex; flex-direction: column; justify-content: flex-end;
+    background: #23252e; width: 26px; border-radius: 6px; overflow: hidden;
+    border: 1px solid var(--border); flex-shrink: 0;
+  }
+  #eval-bar-fill { width: 100%; height: 50%; background: #ececf2; transition: height .35s ease; }
+  .eval-bar-mid { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: rgba(201,168,76,0.45); pointer-events: none; }
+  #eval-bar-label {
+    position: absolute; left: 0; right: 0; text-align: center;
+    font: 700 9.5px 'JetBrains Mono', monospace; pointer-events: none; z-index: 2;
+    bottom: 5px; color: #181a22;
+  }
+  #eval-bar-label.neg { top: 5px; bottom: auto; color: #ececf2; }
+
+  .an-controls { display: flex; gap: 6px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+  .an-controls .sp { flex: 1; }
+  .an-controls span { font: 12px 'JetBrains Mono', monospace; color: var(--text-muted); margin: 0 6px; }
 
   /* ── панели игроков ───────────────────────────────────── */
   .bc-player {
     display: flex; align-items: center; gap: 10px;
     background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
-    padding: 10px 14px; margin-bottom: 10px; min-height: 46px;
+    padding: 10px 14px; margin-bottom: 10px; min-height: 46px; max-width: 720px;
     transition: border-color .2s, box-shadow .2s;
   }
   .bc-player.turn { border-color: var(--accent-dark); box-shadow: 0 0 14px rgba(201,168,76,.12); }
@@ -77,65 +106,13 @@
     min-width: 86px; text-align: center;
   }
   .bc-player .p-clock.turn { background: var(--accent); color: #161820; }
+  .bc-player .p-clock.low { background: rgba(224,85,85,.15); color: var(--red); }
+  .bc-player .p-clock.low.turn { background: var(--red); color: #fff; }
 
-  /* ── доска ────────────────────────────────────────────── */
-  .board-zone {
-    display: flex; gap: 0; max-width: 740px; margin: 0 auto;
-    align-items: stretch;
-  }
-  .eval-bar {
-    flex: none; width: 18px; margin-right: 10px; border-radius: 6px; overflow: hidden;
-    background: #26241f; border: 1px solid var(--border-light); position: relative; display: flex; flex-direction: column;
-  }
-  .eval-bar .white-part { background: #e8e2d0; transition: height .5s ease; width: 100%; margin-top: auto; }
-  .eval-bar .eval-num {
-    position: absolute; left: 50%; top: 3px; transform: translateX(-50%);
-    font-size: 8px; font-weight: 700; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;
-  }
-
-  .board-outer { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .board-center { display: flex; }
-  .rank-col {
-    flex: none; width: 18px; display: flex; flex-direction: column;
-    justify-content: space-around; align-items: center;
-    font-size: 10px; font-weight: 700; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;
-  }
-  .board-and-files { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-
-  .board-wrap {
-    position: relative;
-    width: min(100%, calc(100vh - 280px), 700px); max-width: 700px;
-  }
-  #ann-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; }
-  #board {
-    display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr);
-    width: 100%; aspect-ratio: 1 / 1;
-    border-radius: 10px; overflow: hidden;
-    border: 1px solid rgba(201,168,76,.25);
-    box-shadow: 0 10px 34px rgba(0,0,0,.5);
-    margin: 0; flex: 1;
-  }
-  #board .sq { position: relative; }
-  #board .sq.rmb-hover::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,.22); }
-  #board .sq.light { background: var(--board-light); }
-  #board .sq.dark  { background: var(--board-dark); }
-  #board .sq.hl::after { content: ''; position: absolute; inset: 0; background: var(--board-highlight); }
-  #board .sq img { position: absolute; inset: 0; width: 100%; height: 100%; user-select: none; pointer-events: none; }
-
-  .file-row {
-    display: grid; grid-template-columns: repeat(8, 1fr);
-    font-size: 10px; font-weight: 700; color: var(--text-muted);
-    font-family: 'JetBrains Mono', monospace; text-align: center; padding-top: 4px;
-    width: 100%; max-width: 700px;
-  }
-
-  .bc-under { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; max-width: 700px; margin-left: auto; margin-right: auto; }
+  .bc-under { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
   .bc-status { color: var(--text-secondary); font-size: 13px; }
-  .bc-btns .btn { margin-left: 6px; }
 
   /* ── правая колонка ───────────────────────────────────── */
-  .bc-side { width: 300px; flex: none; display: flex; flex-direction: column; gap: 12px; }
-
   .bc-panel {
     background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
     padding: 14px 16px; font-size: 13px; color: var(--text-secondary); line-height: 1.7;
@@ -150,7 +127,7 @@
 
   #movelist {
     background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
-    flex: 1; min-height: 220px; max-height: calc(100vh - 320px); overflow-y: auto;
+    min-height: 220px; max-height: calc(100vh - 320px); overflow-y: auto;
     padding: 10px; display: grid; grid-template-columns: 36px 1fr 1fr; gap: 2px 4px; align-content: start;
     font-size: 14px;
   }
@@ -164,10 +141,20 @@
   }
   #movelist .mv:hover { background: var(--bg-hover); }
   #movelist .mv.active { background: var(--accent-dark); color: #fff; }
+  /* ходы локального варианта зрителя */
+  #movelist .mv.var { color: var(--accent-light); }
+  #movelist .mv.var.active { background: var(--accent-dark); color: #fff; }
+  #movelist .var-sep {
+    grid-column: 1 / -1; margin: 4px 0 2px; padding: 3px 8px;
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--accent-light); border-top: 1px dashed rgba(201,168,76,.4);
+  }
+  #btn-latest.pulse { animation: bcPulseGold 1.4s infinite; }
+  @keyframes bcPulseGold { 0% { box-shadow: 0 0 0 0 rgba(201,168,76,.5); } 70% { box-shadow: 0 0 0 8px rgba(201,168,76,0); } 100% { box-shadow: 0 0 0 0 rgba(201,168,76,0); } }
 
   .bc-empty { text-align: center; color: var(--text-secondary); padding: 60px 20px; }
 
-  /* ── панель анализа (как в анализе: большая оценка + глубина/ход + PV) ── */
+  /* ── панель анализа (как в анализе: оценка + глубина/ход + 2 линии) ── */
   .bc-analysis { padding: 12px 14px; }
   .eng-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
   .eng-toggle {
@@ -201,14 +188,6 @@
   }
   .eng-meta b { color: var(--text-primary); font-family: 'JetBrains Mono', monospace; }
   .eng-hint { color: var(--text-muted); font-size: 12px; line-height: 1.6; }
-  .eng-node { margin: 0 0 12px; }
-  .eng-node:last-child { margin-bottom: 4px; }
-  .eng-node-title {
-    font-size: 11px; font-weight: 700; color: var(--text-muted);
-    text-transform: uppercase; letter-spacing: .8px; margin-bottom: 5px;
-    display: flex; align-items: center; gap: 6px;
-  }
-  .eng-node-title .cur-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
   .eng-line {
     display: flex; align-items: baseline; gap: 7px;
     padding: 5px 8px; border-radius: 7px; margin-bottom: 3px;
@@ -231,20 +210,29 @@
   .eng-pv .pvmove.sel { background: var(--accent-dark); color: #fff; }
   #btn-back-game { margin-top: 8px; }
 
-  /* ── чат трансляции ──────────────────────────────────── */
+  /* ── чат трансляции (слева, пузыри как в анализе) ─────── */
   .bc-chat { padding: 12px 14px; display: flex; flex-direction: column; }
   #chat-messages {
-    max-height: 280px; min-height: 120px; overflow-y: auto;
-    display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;
+    flex: 1; min-height: 120px; max-height: 640px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;
     scrollbar-width: thin;
   }
-  .chat-msg { font-size: 13px; line-height: 1.5; word-break: break-word; animation: engIn .2s ease; }
-  .chat-msg .c-name { font-weight: 700; color: var(--accent-light); margin-right: 6px; }
-  .chat-msg .c-del {
-    cursor: pointer; color: var(--text-muted); margin-left: 6px; font-size: 11px;
-    user-select: none; transition: color .1s;
+  .chat-msg { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; animation: engIn .2s ease; max-width: 100%; }
+  .chat-msg.mine { align-items: flex-end; }
+  .c-name { font-size: 11px; font-weight: 700; color: var(--accent-light); padding: 0 4px; }
+  .c-row { display: flex; align-items: center; gap: 4px; max-width: 100%; }
+  .chat-msg.mine .c-row { flex-direction: row-reverse; }
+  .c-text {
+    background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px;
+    padding: 6px 11px; font-size: 13px; line-height: 1.45; color: var(--text-primary);
+    word-break: break-word;
   }
-  .chat-msg .c-del:hover { color: var(--red); }
+  .chat-msg.mine .c-text { background: rgba(201,168,76,.12); border-color: rgba(201,168,76,.35); }
+  .c-del {
+    cursor: pointer; color: var(--text-muted); font-size: 11px;
+    user-select: none; transition: color .1s; flex: none;
+  }
+  .c-del:hover { color: var(--red); }
   .chat-hint { color: var(--text-muted); font-size: 12px; }
   .chat-hint a { color: var(--accent); }
   #chat-form { display: flex; gap: 6px; }
@@ -256,19 +244,23 @@
   #chat-input:focus { border-color: var(--accent-dark); }
   #chat-send { flex: none; }
 
-  .p-clock.low { background: rgba(224,85,85,.15); color: var(--red); }
-  .p-clock.low.turn { background: var(--red); color: #fff; }
-
-  @media (max-width: 800px) {
+  @media (max-width: 980px) {
     .bc-layout { flex-direction: column; align-items: stretch; }
-    .bc-side { width: 100%; }
-    .bc-board-col, .bc-player, .board-zone, .bc-under { width: 100%; max-width: 100%; box-sizing: border-box; }
+    .bc-chat-col, .bc-side { width: 100%; max-width: none; }
+    .bc-side { order: 2; }
+    .bc-chat-col { order: 3; }
+    .bc-chat-col .bc-chat { flex: none; }
+  }
+  @media (max-width: 768px) {
+    .bc-page { padding: 12px 10px 40px; }
+    .bc-board-col, .bc-player, .bc-under { width: 100%; max-width: 100%; box-sizing: border-box; }
     #movelist { max-height: 300px; }
     .bc-name { font-size: 20px; white-space: normal; }
-    .eval-bar { width: 12px; margin-right: 6px; }
-    #board, .file-row, .board-wrap { width: 100%; max-width: none; }
+    .eval-bar-container { display: none; }
+    .board-wrapper { display: flex; justify-content: center; }
+    #chess-board { width: min(calc(100vw - 16px), 480px) !important; height: min(calc(100vw - 16px), 480px) !important; max-width: 100% !important; }
     .eng-score-big { font-size: 24px; }
-    #chat-messages { max-height: 200px; }
+    #chat-messages { max-height: 240px; }
   }
 </style>
 </head>
@@ -288,37 +280,47 @@
   </div>
 
   <div class="bc-layout">
+    <!-- чат — слева, как в анализе -->
+    <div class="bc-chat-col">
+      <div class="bc-panel bc-chat" id="chat-panel">
+        <h4>💬 Чат трансляции</h4>
+        <div id="chat-messages"><div class="chat-hint">Загрузка…</div></div>
+        <form id="chat-form" style="display:none">
+          <input id="chat-input" maxlength="300" placeholder="Сообщение…" autocomplete="off">
+          <button type="submit" class="btn btn-primary btn-sm" id="chat-send">➤</button>
+        </form>
+        <div class="chat-hint" id="chat-login-hint" style="display:none"></div>
+      </div>
+    </div>
+
     <div class="bc-board-col">
       <div class="bc-player" id="bar-top"><span class="p-chip" id="chip-top"></span><span class="p-name">—</span><span class="p-rating"></span><span class="p-clock">—</span></div>
 
-      <div class="board-zone">
-        <div class="eval-bar" id="eval-bar" style="display:none">
-          <div class="eval-num" id="eval-num"></div>
-          <div class="white-part" id="eval-white" style="height:50%"></div>
+      <div class="board-row">
+        <div class="eval-bar-container" id="eval-bar-container" style="display:none">
+          <div class="eval-bar-mid"></div>
+          <div id="eval-bar-fill"></div>
+          <span id="eval-bar-label">0.0</span>
         </div>
-        <div class="board-outer">
-          <div class="board-center">
-            <div class="rank-col" id="rank-col"></div>
-            <div class="board-and-files">
-              <div class="board-wrap">
-                <div id="board"></div>
-                <svg id="ann-svg" viewBox="0 0 8 8" preserveAspectRatio="none"></svg>
-              </div>
-              <div class="file-row" id="file-row"></div>
-            </div>
-          </div>
-        </div>
+        <!-- доска из /js/board.js (как на странице анализа) -->
+        <div class="board-wrapper" id="game-board-container"></div>
+      </div>
+
+      <div class="an-controls">
+        <button class="btn btn-ghost btn-sm" id="nav-first" title="В начало (↑)">⏮</button>
+        <button class="btn btn-ghost btn-sm" id="nav-prev" title="Назад (←)">◀</button>
+        <button class="btn btn-ghost btn-sm" id="nav-next" title="Вперёд (→)">▶</button>
+        <button class="btn btn-ghost btn-sm" id="nav-last" title="В конец (↓)">⏭</button>
+        <span id="move-counter">0 / 0</span>
+        <div class="sp"></div>
+        <button class="btn btn-ghost btn-sm" id="btn-latest" style="display:none">⤝ К последнему ходу</button>
+        <button class="btn btn-ghost btn-sm" id="btn-flip" title="Развернуть (F)">↕ Развернуть</button>
       </div>
 
       <div class="bc-player" id="bar-bottom" style="margin-top:10px"><span class="p-chip" id="chip-bottom"></span><span class="p-name">—</span><span class="p-rating"></span><span class="p-clock">—</span></div>
 
       <div class="bc-under">
         <div class="bc-status" id="bc-status"></div>
-        <div class="bc-btns">
-          <button class="btn btn-ghost btn-sm" id="btn-engine">🔬 Анализ</button>
-          <button class="btn btn-ghost btn-sm" id="btn-latest" style="display:none">⏭ К последнему ходу</button>
-          <button class="btn btn-ghost btn-sm" id="btn-flip">⇅ Перевернуть</button>
-        </div>
       </div>
     </div>
 
@@ -340,19 +342,25 @@
         <button class="btn btn-ghost btn-sm" id="btn-back-game" style="display:none">⤺ Вернуться к партии</button>
       </div>
       <div id="movelist"></div>
-      <div class="bc-panel bc-chat" id="chat-panel">
-        <h4>💬 Чат трансляции</h4>
-        <div id="chat-messages"><div class="chat-hint">Загрузка…</div></div>
-        <form id="chat-form" style="display:none">
-          <input id="chat-input" maxlength="300" placeholder="Сообщение…" autocomplete="off">
-          <button type="submit" class="btn btn-primary btn-sm" id="chat-send">➤</button>
-        </form>
-        <div class="chat-hint" id="chat-login-hint" style="display:none">Войдите на сайт, чтобы писать в чат.</div>
-      </div>
     </div>
   </div>
 
   <div class="bc-empty" id="bc-error" style="display:none"></div>
+</div>
+
+<!-- модалка превращения (нужна board.js, когда зритель проводит пешку в своём варианте) -->
+<div class="modal-overlay" id="modal-promotion">
+  <div class="modal promo-modal">
+    <div class="promo-icon">👑</div>
+    <h2>Превращение пешки</h2>
+    <p style="color:var(--text-secondary);font-size:14px">Выберите фигуру</p>
+    <div class="promo-pieces">
+      <button class="promo-piece-btn" data-piece="Q"><img src="" alt="Q"></button>
+      <button class="promo-piece-btn" data-piece="R"><img src="" alt="R"></button>
+      <button class="promo-piece-btn" data-piece="B"><img src="" alt="B"></button>
+      <button class="promo-piece-btn" data-piece="N"><img src="" alt="N"></button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -366,11 +374,11 @@
   let data = null;            // ответ сервера
   let games = [];             // распарсенные партии PGN
   let gameIdx = 0;
-  let viewPly = -1;           // сколько ходов показываем; -1 = последний
-  let follow = true;          // следить за последним ходом
-  let flipped = false;
+  let uciMoves = [];          // ходы текущей партии для board.js
+  let preview = null;         // { key, lineIdx, moveIdx, restorePly } — превью варианта
   let lastUpdatedAt = null;
   let stopped = false;
+  let newLiveMoves = false;   // пока зритель в своём варианте — пришли новые ходы трансляции
 
   // ── состояние движка ─────────────────────────────────────────────
   let engineOn = false;
@@ -378,7 +386,6 @@
   let sfReady = false;
   let engNodes = new Map();     // key 'gameIdx:ply' -> { fen, ply, gameIdx, lines:{}, done }
   let engBusyKey = null;        // что сейчас считает движок
-  let preview = null;           // { key, lineIdx, moveIdx } — превью варианта на доске
   let treeDirty = false;
 
   // ── утилиты ──────────────────────────────────────────────────────
@@ -425,163 +432,91 @@
     return out;
   }
 
-  // ── доска ────────────────────────────────────────────────────────
-  function fenBoard(fen) {
-    const board = {};
-    const rows = fen.split(' ')[0].split('/');
-    for (let r = 0; r < 8; r++) {
-      let file = 0;
-      for (const ch of rows[r]) {
-        if (ch >= '1' && ch <= '8') { file += +ch; continue; }
-        const sq = 'abcdefgh'[file] + (8 - r);
-        board[sq] = { t: ch.toLowerCase(), c: (ch === ch.toLowerCase()) ? 'b' : 'w' };
-        file++;
-      }
-    }
-    return board;
-  }
+  // ── доска: используем chessBoard из /js/board.js (как в анализе) ─
+  // ВАЖНО: board.js объявляет chessBoard через top-level const — это
+  // глобальная лексическая привязка, в window её нет. Обращаемся напрямую.
+  function cb() { return chessBoard; }
 
-  function renderCoords() {
-    const files = flipped ? ['h','g','f','e','d','c','b','a'] : ['a','b','c','d','e','f','g','h'];
-    const ranks = flipped ? [1,2,3,4,5,6,7,8] : [8,7,6,5,4,3,2,1];
-    $('rank-col').innerHTML = ranks.map(r => '<div>' + r + '</div>').join('');
-    $('file-row').innerHTML = files.map(f => '<div>' + f + '</div>').join('');
-  }
+  function histLen() { const g = games[gameIdx]; return g ? g.hist.length : 0; }
+  function curPly() { return cb() ? cb().viewIndex : 0; }
+  function isFollowing() { return !preview && follow && curPly() >= histLen(); }
 
-  function renderBoard() {
+  function sqIdx(s) { return 'abcdefgh'.indexOf(s[0]) + (parseInt(s[1], 10) - 1) * 8; }
+
+  // ── локальный вариант зрителя ──────────────────────────────────
+  // Зритель может двигать фигуры — ходы остаются ТОЛЬКО у него на доске.
+  // Вариант определяется тем, что FEN основной линии доски (getFEN)
+  // отличается от финального FEN трансляции.
+  function varMode() {
+    if (preview || !boardSynced) return false;
     const g = games[gameIdx];
-    const k = (viewPly < 0) ? (g ? g.hist.length : 0) : viewPly;
-    let fen, lastMove;
-
-    if (preview) {
-      // превью варианта из дерева анализа
-      const node = engNodes.get(preview.key);
-      const line = node && node.lines[preview.lineIdx];
-      if (line && line.fens && line.fens[preview.moveIdx]) {
-        fen = line.fens[preview.moveIdx];
-        const uci = line.pvUci[preview.moveIdx - 1] || '';
-        lastMove = { from: uci.slice(0, 2), to: uci.slice(2, 4) };
-      } else { preview = null; }
-    }
-
-    if (!preview) {
-      fen = g ? g.fens[Math.min(k, g.fens.length - 1)] : new Chess().fen();
-      lastMove = (g && k > 0) ? g.hist[k - 1] : null;
-    }
-
-    const board = fenBoard(fen);
-    const el = $('board');
-    el.innerHTML = '';
-    const files = flipped ? ['h','g','f','e','d','c','b','a'] : ['a','b','c','d','e','f','g','h'];
-    const ranks = flipped ? [1,2,3,4,5,6,7,8] : [8,7,6,5,4,3,2,1];
-
-    for (const r of ranks) {
-      for (const f of files) {
-        const sq = f + r;
-        const cell = document.createElement('div');
-        // a1 должна быть тёмной: считаем по АБСОЛЮТНОИ индексу файла,
-        // чтобы окраска не ломалась при перевороте доски
-        const dark = ('abcdefgh'.indexOf(f) + r) % 2 === 1;
-        cell.className = 'sq ' + (dark ? 'dark' : 'light');
-        cell.dataset.sq = sq;
-        if (lastMove && (lastMove.from === sq || lastMove.to === sq)) cell.classList.add('hl');
-        const p = board[sq];
-        if (p) {
-          const img = document.createElement('img');
-          img.src = PIECE_IMGS[p.c + p.t.toUpperCase()];
-          img.alt = '';
-          cell.appendChild(img);
-        }
-        el.appendChild(cell);
-      }
-    }
-    renderCoords();
-    drawAnnotations();
+    if (!g || !g.fens.length) return false;
+    return cb().getFEN() !== g.fens[Math.min(g.hist.length, g.fens.length - 1)];
   }
 
-  // ── аннотации: стрелки и кружки (правая кнопка мыши) ────────────
-  const ANN_COLORS = ['#15781B', '#882020', '#003088', '#e68f00'];
-  let anns = [];          // { type:'arrow'|'circle', from,to,sq, color }
-  let engArrow = null;    // { from, to } — лучший ход движка
-  let rmbDown = null;     // { sq, x, y }
-
-  function sqPos(sq) {
-    const fi = 'abcdefgh'.indexOf(sq[0]);
-    const rk = parseInt(sq[1], 10);
-    const x = flipped ? 7 - fi : fi;
-    const y = flipped ? rk - 1 : 8 - rk;
-    return { x: x + 0.5, y: y + 0.5 };
+  // индекс первого хода в локальной истории, которого нет в трансляции
+  function varStartIdx(h, g) {
+    for (let i = 0; i < h.length; i++) {
+      if (i >= g.hist.length) return i;
+      const gm = g.hist[i];
+      if (!h[i] || h[i].from !== sqIdx(gm.from) || h[i].to !== sqIdx(gm.to)) return i;
+    }
+    return h.length;
   }
 
-  function drawAnnotations() {
-    const svg = $('ann-svg');
-    if (!svg) return;
-    const defs = ANN_COLORS.map((c, i) =>
-      `<marker id="ah${i}" viewBox="0 0 10 10" refX="6.5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 Z" fill="${c}"/></marker>`
-    ).join('');
-    let body = '';
-    for (const a of anns) {
-      const ci = ANN_COLORS.indexOf(a.color);
-      if (a.type === 'circle') {
-        const p = sqPos(a.sq);
-        body += `<circle cx="${p.x}" cy="${p.y}" r="0.46" fill="none" stroke="${a.color}" stroke-width="0.09" opacity="0.8"/>`;
-      } else {
-        const p1 = sqPos(a.from), p2 = sqPos(a.to);
-        const dx = p2.x - p1.x, dy = p2.y - p1.y, len = Math.hypot(dx, dy) || 1;
-        const ex = p2.x - dx / len * 0.32, ey = p2.y - dy / len * 0.32;
-        body += `<line x1="${p1.x}" y1="${p1.y}" x2="${ex}" y2="${ey}" stroke="${a.color}" stroke-width="0.16" stroke-linecap="round" opacity="0.75" marker-end="url(#ah${ci})"/>`;
-      }
-    }
-    if (engArrow && !preview) {
-      const p1 = sqPos(engArrow.from), p2 = sqPos(engArrow.to);
-      const dx = p2.x - p1.x, dy = p2.y - p1.y, len = Math.hypot(dx, dy) || 1;
-      const ex = p2.x - dx / len * 0.32, ey = p2.y - dy / len * 0.32;
-      body += `<line x1="${p1.x}" y1="${p1.y}" x2="${ex}" y2="${ey}" stroke="#003088" stroke-width="0.16" stroke-linecap="round" opacity="0.8" marker-end="url(#ah2)"/>`;
-    }
-    svg.innerHTML = `<defs>${defs}</defs>${body}`;
+  // базовое время из заголовка TimeControl ('600+2' → 600 сек, '120'/40m' → 7200 сек)
+  function tcBaseSec(g) {
+    if (!g || !g.headers || !g.headers.TimeControl) return null;
+    const tc = String(g.headers.TimeControl);
+    let m = tc.match(/^(\d+)\s*\+/);
+    if (m) return parseInt(m[1], 10);
+    m = tc.match(/^(\d+)\s*'/);
+    if (m) return parseInt(m[1], 10) * 60;
+    m = tc.match(/(\d+)\s*(?:min|м)\b/i);
+    if (m) return parseInt(m[1], 10) * 60;
+    return null;
   }
 
-  function toggleAnn(a) {
-    const idx = anns.findIndex(x => x.type === a.type &&
-      (a.type === 'circle' ? x.sq === a.sq : (x.from === a.from && x.to === a.to)));
-    if (idx >= 0) {
-      const cur = anns[idx];
-      const next = ANN_COLORS[(ANN_COLORS.indexOf(cur.color) + 1) % ANN_COLORS.length];
-      if (next === cur.color || (cur.color === a.color)) anns.splice(idx, 1);
-      else anns[idx].color = next;
-    } else {
-      anns.push(a);
-    }
-    drawAnnotations();
+  function movesFor(hist) {
+    return hist.map(mv => ({
+      from: sqIdx(mv.from), to: sqIdx(mv.to),
+      promotion: mv.promotion || undefined,
+    }));
   }
 
-  const boardEl = $('board');
-  boardEl.addEventListener('contextmenu', e => e.preventDefault());
-  boardEl.addEventListener('mousedown', (e) => {
-    if (e.button !== 2) return;
-    const cell = e.target.closest('.sq');
-    if (!cell) return;
-    rmbDown = { sq: cell.dataset.sq, x: e.clientX, y: e.clientY };
-    cell.classList.add('rmb-hover');
-  });
-  window.addEventListener('mouseup', (e) => {
-    if (e.button !== 2 || !rmbDown) return;
-    const cell = document.elementFromPoint(e.clientX, e.clientY);
-    const target = cell && cell.closest ? cell.closest('#board .sq') : null;
-    const endSq = target ? target.dataset.sq : null;
-    document.querySelectorAll('#board .rmb-hover').forEach(el => el.classList.remove('rmb-hover'));
-    if (endSq && endSq !== rmbDown.sq) {
-      toggleAnn({ type: 'arrow', from: rmbDown.sq, to: endSq, color: ANN_COLORS[0] });
-    } else if (endSq === rmbDown.sq) {
-      toggleAnn({ type: 'circle', sq: rmbDown.sq, color: ANN_COLORS[0] });
-    }
-    rmbDown = null;
-  });
-  window.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && anns.length) { anns = []; drawAnnotations(); }
+  // Загрузить партию в доску и встать на позицию ply (0 = старт)
+  function loadGame(g, ply) {
+    inProgram = true;
+    const wasFlipped = cb().flipped; // не сбрасываем переворот при обновлении партии
+    uciMoves = movesFor(g.hist);
+    cb().loadGameMoves(uciMoves);
+    if (wasFlipped && !cb().flipped) cb().flipBoard();
+    cb().gotoMove(Math.max(0, Math.min(ply, g.hist.length)));
+    boardSynced = true;
+    inProgram = false;
+  }
+
+  // follow — следим за последним ходом; меняется только действиями зрителя
+  let follow = true;
+  let inProgram = false;
+  let boardSynced = false; // доска хоть раз загрузила партию трансляции
+
+  function syncGame() {
+    const g = games[gameIdx];
+    if (!g) { cb().loadFEN(new Chess().fen()); return; }
+    loadGame(g, follow ? g.hist.length : curPly());
+  }
+
+  // после любого рендера доски (навигация зчителя, его ходы-вариант,
+  // переворот) — обновляем панели. Программные перезагрузки (inProgram)
+  // игнорируем, чтобы не зациклиться.
+  document.addEventListener('board:render', () => {
+    if (inProgram) return;
+    follow = !preview && curPly() >= histLen();
+    bcRender();
   });
 
-  // ── eval-бар ─────────────────────────────────────────────────────
+  // ── eval-бар (как в анализе) ─────────────────────────────────────
   function evalAt(g, k) {
     if (!g || !g.evals.length) return null;
     const i = k - 1; // evals[i] соответствует ходу i+1
@@ -589,13 +524,18 @@
     return g.evals[i];
   }
 
+  function bcRender() {
+    renderPlayers(); renderMoves(); renderMeta(); renderEval();
+    if (engineOn && !preview) analyzeNow();
+  }
+
   function renderEval() {
     const g = games[gameIdx];
-    const k = (viewPly < 0) ? (g ? g.hist.length : 0) : viewPly;
-    const e = evalAt(g, k);
-    const bar = $('eval-bar');
-    if (e == null) { bar.style.display = 'none'; return; }
-    bar.style.display = '';
+    const k = curPly();
+    const e = (!preview && !varMode()) ? evalAt(g, k) : null;
+    const cont = $('eval-bar-container');
+    if (e == null) { cont.style.display = 'none'; return; }
+    cont.style.display = '';
     let whitePct = 50, label = '';
     if (e[0] === '#') {
       const m = parseInt(e.slice(1), 10);
@@ -603,27 +543,21 @@
       label = 'M' + Math.abs(m || 1);
     } else {
       const v = parseFloat(e);
-      if (isNaN(v)) { bar.style.display = 'none'; return; }
-      // мягкая нелинейность: 50 + v*~4.2, зажата в 6..94
+      if (isNaN(v)) { cont.style.display = 'none'; return; }
       whitePct = Math.max(6, Math.min(94, 50 + v * 4.2));
       label = (v > 0 ? '+' : '') + v.toFixed(1);
     }
-    $('eval-white').style.height = whitePct + '%';
-    $('eval-num').textContent = label;
-  }
-
-  // ── часы: последнее известное время каждой стороны на позиции k ──
-  function clocksAt(g, k) {
-    let w = null, b = null;
-    for (let i = 0; i < k && i < g.clk.length; i++) {
-      if (i % 2 === 0) w = g.clk[i]; else b = g.clk[i];
-    }
-    return { w, b };
+    $('eval-bar-fill').style.height = whitePct + '%';
+    const lbl = $('eval-bar-label');
+    lbl.textContent = label;
+    lbl.classList.toggle('neg', e[0] !== '#' && parseFloat(e) < 0);
   }
 
   // ── часы: локальный тик каждую секунду ────────────────────────────
+  // [%clk] в PGN стоят ПОСЛЕ каждого хода: clk[0] — время белых после
+  // 1-го хода белых, clk[1] — время чёрных после их 1-го хода и т.д.
   // Когда приходит новый ход от lichess, отсчёт стартует от текущего
-  // локального времени: remaining = база из [%clk] − (now − anchor).
+  // локального времени: remaining = база из [%clk] − (now − t_получения).
   function parseClk(s) {
     if (!s) return null;
     const p = String(s).split(':').map(Number);
@@ -642,23 +576,33 @@
   let liveClock = null; // { w, b, side, base, at }
 
   function computeLiveClock(g, k) {
+    if (varMode()) return; // в локальном варианте часы трансляции не трогаем
     liveClock = null;
     if (!g || !data || data.status !== 'live' || k !== g.hist.length || !g.clk.length) return;
-    const c = clocksAt(g, k);
-    const ws = parseClk(c.w), bs = parseClk(c.b);
+    // последние известные времена каждой стороны на позиции k
+    let wStr = null, bStr = null;
+    for (let i = 0; i < k && i < g.clk.length; i++) {
+      if (i % 2 === 0) wStr = g.clk[i]; else bStr = g.clk[i];
+    }
+    // если сторона ещё не сделала ни одного хода — её время = база из TimeControl
+    const tb = tcBaseSec(g);
+    const ws = parseClk(wStr) != null ? parseClk(wStr) : tb;
+    const bs = parseClk(bStr) != null ? parseClk(bStr) : tb;
     if (ws == null && bs == null) return;
+    // сыграно k полуходов: k чётное → ход белых, нечётное → чёрных.
+    // ТИКАЕТ та сторона, ЧЕЙ СЕЙЧАС ХОД (а не та, что сходила).
     const side = k % 2 === 0 ? 'w' : 'b';
     liveClock = {
       w: ws, b: bs, side,
-      base: side === 'w' ? ws : bs,
-      at: Date.now(), // старт отсчёта — текущее локальное время
+      base: side === 'w' ? ws : bs, // база ИДУЩЕЙ стороны
+      at: Date.now(),               // старт отсчёта — текущее локальное время
     };
   }
 
   function renderClocksOnly() {
     if (!liveClock) return;
     const rem = Math.max(0, liveClock.base - (Date.now() - liveClock.at) / 1000);
-    // у идущего сторону — локальный отсчёт, у второй — последнее известное
+    // у идущей стороны — локальный отсчёт, у второй — последнее известное
     const clockOf = (side) => side === liveClock.side
       ? rem
       : (side === 'w' ? liveClock.w : liveClock.b);
@@ -667,8 +611,10 @@
       c.textContent = fmtClock(clockOf(side));
       c.classList.toggle('low', side === liveClock.side && rem < 30);
     };
-    fill('bar-top', flipped ? 'b' : 'w');
-    fill('bar-bottom', flipped ? 'w' : 'b');
+    const flipped = cb() && cb().flipped;
+    // без переворота: сверху чёрные, снизу белые
+    fill('bar-top', flipped ? 'w' : 'b');
+    fill('bar-bottom', flipped ? 'b' : 'w');
   }
 
   // ── панели игроков ───────────────────────────────────────────────
@@ -686,16 +632,32 @@
 
   function renderPlayers() {
     const g = games[gameIdx];
-    const k = (viewPly < 0) ? (g ? g.hist.length : 0) : viewPly;
-    const turn = k % 2 === 0 ? 'w' : 'b';
-    const clk = g ? clocksAt(g, k) : { w: null, b: null };
+    const vm = varMode();
+    // в варианте зрителя «текущая позиция» = последняя позиция трансляции
+    const k = vm && g ? g.hist.length : curPly();
+    const turn = k % 2 === 0 ? 'w' : 'b'; // k полуходов сыграно: чётное → ход белых
+    const clk = { w: null, b: null };
+    if (g) {
+      let wStr = null, bStr = null;
+      for (let i = 0; i < k && i < g.clk.length; i++) {
+        if (i % 2 === 0) wStr = g.clk[i]; else bStr = g.clk[i];
+      }
+      clk.w = wStr; clk.b = bStr;
+    }
     computeLiveClock(g, k);
-    // на последнем ходе живой трансляции — локальный отсчёт
+    // на последнем ходе живой трансляции — локальный отсчёт у идущей стороны
     if (liveClock) {
       const rem = Math.max(0, liveClock.base - (Date.now() - liveClock.at) / 1000);
       if (liveClock.side === 'w') clk.w = fmtClock(rem); else clk.b = fmtClock(rem);
     }
+    // сторона ещё не сходила → показываем базовое время из TimeControl
+    if (g) {
+      const tb = tcBaseSec(g);
+      if (clk.w == null && tb != null) clk.w = fmtClock(tb);
+      if (clk.b == null && tb != null) clk.b = fmtClock(tb);
+    }
 
+    const flipped = cb() && cb().flipped;
     const bottomSide = flipped ? 'b' : 'w';
     const topSide = flipped ? 'w' : 'b';
     const fb = (data && data.white && data.black) ? data.white + '/' + data.black : '';
@@ -720,10 +682,9 @@
     };
     fill('bar-top', 'chip-top', topSide);
     fill('bar-bottom', 'chip-bottom', bottomSide);
-    renderClocksOnly();
   }
 
-  // ── список ходов ─────────────────────────────────────────────────
+  // ── список ходов ─────────────────────────────────────────
   function renderMoves() {
     const g = games[gameIdx];
     const el = $('movelist');
@@ -732,22 +693,30 @@
       return;
     }
     el.style.display = '';
-    const k = (viewPly < 0) ? g.hist.length : viewPly;
+    const vm = varMode();
+    const h = vm ? (cb().history || []) : null; // локальная история с вариантом
+    const vStart = vm && h ? varStartIdx(h, g) : h ? h.length : g.hist.length;
+    const src = vm && h && h.length ? h : g.hist;
+    const k = preview ? -1 : (vm && h && h.length ? h.length : curPly());
     let html = '';
-    for (let i = 0; i < g.hist.length; i += 2) {
+    for (let i = 0; i < src.length; i += 2) {
+      // разделитель «ваш вариант» — перед строкой, где начинается первый ход-вариант
+      if (vm && ((i === vStart && i > 0) || (vStart === i + 1 && i > 0))) {
+        html += '<div class="var-sep">—— ваш локальный вариант ——</div>';
+      } else if (vm && vStart === 0 && i === 0) {
+        html += '<div class="var-sep">—— ваш локальный вариант с начала партии ——</div>';
+      }
+      const cls = (idx) => (k === idx + 1 ? 'mv active' : 'mv') + (vm && idx >= vStart ? ' var' : '');
+      const ply = (idx) => idx + 1;
       html += `<div class="mv-num">${i / 2 + 1}.</div>`;
-      html += `<div class="mv${(k === i + 1) ? ' active' : ''}" data-ply="${i + 1}">${esc(g.hist[i].san)}</div>`;
-      html += g.hist[i + 1]
-        ? `<div class="mv${(k === i + 2) ? ' active' : ''}" data-ply="${i + 2}">${esc(g.hist[i + 1].san)}</div>`
+      html += `<div class="${cls(i)}" data-ply="${ply(i)}">${esc(src[i].san)}</div>`;
+      html += src[i + 1]
+        ? `<div class="${cls(i + 1)}" data-ply="${ply(i + 1)}">${esc(src[i + 1].san)}</div>`
         : '<div></div>';
     }
     el.innerHTML = html;
     el.querySelectorAll('.mv').forEach(m => m.addEventListener('click', () => {
-      viewPly = +m.getAttribute('data-ply');
-      follow = false;
-      preview = null;
-      $('btn-back-game').style.display = 'none';
-      renderAll();
+      cb().gotoMove(+m.getAttribute('data-ply'));
     }));
     const act = el.querySelector('.mv.active');
     if (act) act.scrollIntoView({ block: 'nearest' });
@@ -766,9 +735,13 @@
       : 'ожидание';
 
     const g = games[gameIdx];
-    const k = (viewPly < 0) ? (g ? g.hist.length : 0) : viewPly;
+    const vm = varMode();
+    const k = curPly();
+    $('move-counter').textContent = k + ' / ' + (g ? g.hist.length : 0);
     let st = '';
-    if (data.status === 'upcoming' || data.status === 'pending') {
+    if (vm) {
+      st = 'Локальный вариант — фигуры двигаете только вы, у остальных этого не видно. Вернитесь к трансляции, чтобы продолжить просмотр.';
+    } else if (data.status === 'upcoming' || data.status === 'pending') {
       st = 'Начало: ' + fmtTime(data.startsAt);
     } else if (data.status === 'finished' && g) {
       st = 'Партия завершена: ' + (g.headers.Result || data.result || '');
@@ -788,7 +761,8 @@
       (data.description ? esc(data.description) + '<br>' : '') +
       (data.sourceUrl ? 'Источник: <a href="' + esc(data.sourceUrl) + '" target="_blank" rel="noopener">lichess.org</a><br>' : '') +
       (open ? 'Дебют: ' + esc(open) + '<br>' : '') +
-      (tc ? 'Контроль: ' + esc(tc) : '');
+      (tc ? 'Контроль: ' + esc(tc) : '') +
+      '<br>Фигуры можно двигать — это ваш личный локальный вариант, у других зрителей его нет.';
 
     const sel = $('game-select');
     if (games.length > 1) {
@@ -802,11 +776,14 @@
       sel.style.display = 'none';
     }
 
-    $('btn-latest').style.display = (games.length && !follow && viewPly !== (games[gameIdx] ? games[gameIdx].hist.length : 0)) ? '' : 'none';
+    const btnL = $('btn-latest');
+    btnL.style.display = (games.length && !preview && (!isFollowing() || vm)) ? '' : 'none';
+    btnL.textContent = vm
+      ? (newLiveMoves ? '⤺ Вернуться к трансляции · есть новые ходы' : '⤺ Вернуться к трансляции')
+      : '⤝ К последнему ходу';
+    btnL.classList.toggle('pulse', vm && newLiveMoves);
     document.title = (data.name || 'Трансляция') + ' — Chess Home';
   }
-
-  function renderAll() { renderBoard(); renderPlayers(); renderMoves(); renderMeta(); renderEval(); if (engineOn) analyzeNow(); }
 
   // ── загрузка данных ──────────────────────────────────────────────
   async function load() {
@@ -828,28 +805,39 @@
       lastUpdatedAt = d.updatedAt;
       const parsed = d.pgn ? parsePgn(d.pgn) : [];
       if (parsed.length) {
+        const prevLen = games[gameIdx] ? games[gameIdx].hist.length : -1;
         games = parsed;
         if (gameIdx >= games.length) gameIdx = 0;
-        if (follow) viewPly = -1;
+        const g2 = games[gameIdx];
+        const grew = g2 && g2.hist.length > prevLen;
+        // во время превью/варианта доску не трогаем
+        if (preview) { /* ждём выхода из превью */ }
+        else if (varMode()) { if (grew) newLiveMoves = true; }
+        else { if (grew) newLiveMoves = false; syncGame(); }
+        bcRender();
       }
-      renderAll();
     } else {
       renderMeta();
     }
   }
 
-  // ── движок: анализ вариантов ─────────────────────────────────────
+  // ── движок: 2 линии, как в анализе ───────────────────────────────
   const ENGINE_DEPTH = 10;
-  const ENGINE_LINES = 3;
+  const ENGINE_LINES = 2;
 
-  function currentKey() { return gameIdx + ':' + ((viewPly < 0) ? (games[gameIdx] ? games[gameIdx].hist.length : 0) : viewPly); }
+  function currentKey() {
+    // в локальном варианте ключ по FEN — у варианта нет своего ply в PGN
+    if (varMode()) return 'v' + gameIdx + ':' + cb().getViewFEN();
+    return gameIdx + ':' + curPly();
+  }
   function currentFen() {
+    if (varMode()) return cb().getViewFEN(); // анализируем позицию варианта
     const g = games[gameIdx];
-    const k = (viewPly < 0) ? (g ? g.hist.length : 0) : viewPly;
+    const k = curPly();
     return g ? g.fens[Math.min(k, g.fens.length - 1)] : new Chess().fen();
   }
 
-  function setStatus(txt) { $('engine-status').textContent = txt ? '· ' + txt : ''; }
+  function setStatus(txt) { $('engine-status').textContent = txt ? txt : ''; }
 
   function ensureEngine() {
     if (sf) return sfReady;
@@ -896,7 +884,6 @@
       }
       node.lines[+m[2]] = { score, type: m[3], depth: +m[1], turn: node.fen.split(' ')[1] || 'w', san, fens, pvUci };
       scheduleTreeRender();
-      if (+m[2] === 1) { node.done = false; }
     }
     if (s.indexOf('bestmove') === 0 && engBusyKey) {
       const node = engNodes.get(engBusyKey);
@@ -911,9 +898,9 @@
     const key = currentKey();
     let node = engNodes.get(key);
     if (!node) {
-      node = { key, fen: currentFen(), ply: +key.split(':')[1], gameIdx, lines: {}, done: false };
-      // не разрастаемся: держим последние 14 позиций
-      if (engNodes.size >= 14) {
+      node = { key, fen: currentFen(), ply: curPly(), gameIdx, lines: {}, done: false };
+      // не разрастаемся: держим последние 8 позиций
+      if (engNodes.size >= 8) {
         const first = engNodes.keys().next().value;
         if (preview && preview.key === first) preview = null;
         engNodes.delete(first);
@@ -928,7 +915,7 @@
     node.done = false;
     sf.postMessage('position fen ' + node.fen);
     sf.postMessage('go depth ' + ENGINE_DEPTH);
-    setStatus('думаю…');
+    setStatus('Анализирует…');
   }
 
   let treeTimer = null;
@@ -963,52 +950,45 @@
       sc.className = 'eng-score-big ' + scoreClass(main);
       $('eng-depth').textContent = main.depth;
       $('eng-best').textContent = main.san[0];
-      engArrow = { from: main.pvUci[0].slice(0, 2), to: main.pvUci[0].slice(2, 4) };
-      setStatus(curNode.done ? 'готов' : 'Анализирует…');
+      setStatus(curNode.done ? 'Готов' : 'Анализирует…');
       $('engine-status').classList.toggle('thinking', !curNode.done);
     } else {
       $('eng-score').textContent = '—'; $('eng-score').className = 'eng-score-big';
       $('eng-depth').textContent = '—'; $('eng-best').textContent = '—';
-      engArrow = null;
       setStatus('Анализирует…');
       $('engine-status').classList.add('thinking');
     }
-    drawAnnotations();
 
-    const keys = [...engNodes.keys()].sort((a, b) => (+a.split(':')[1]) - (+b.split(':')[1]));
-    if (!keys.length) { $('analysis-tree').innerHTML = '<div class="eng-hint">Варианты появятся здесь…</div>'; return; }
+    // только линии текущей позиции (2 линии, как в анализе)
+    const key = currentKey();
+    const idxs = curNode ? Object.keys(curNode.lines).sort((a, b) => a - b) : [];
+    if (!idxs.length) { $('analysis-tree').innerHTML = '<div class="eng-hint">Думаю…</div>'; return; }
 
     let html = '';
-    for (const key of keys) {
-      const node = engNodes.get(key);
-      const isCur = key === currentKey();
-      const num = Math.ceil(node.ply / 2);
-      const title = node.ply === 0 ? 'Начальная позиция'
-        : 'После хода ' + num + (node.ply % 2 ? ' белыми' : ' чёрными')
-        + (games[gameIdx] && games[gameIdx].hist[node.ply - 1] ? ' · ' + esc(games[gameIdx].hist[node.ply - 1].san) : '');
-      html += '<div class="eng-node"><div class="eng-node-title">' + (isCur ? '<span class="cur-dot"></span>' : '') + esc(title) + '</div>';
-      const idxs = Object.keys(node.lines).sort((a, b) => a - b);
-      if (!idxs.length) html += '<div class="eng-hint">считаю…</div>';
-      for (const li of idxs) {
-        const line = node.lines[li];
-        if (!line.san.length) continue;
-        html += '<div class="eng-line"><span class="eng-score ' + scoreClass(line) + '">' + fmtScore(line) + '</span><span class="eng-pv">';
-        for (let j = 0; j < line.san.length; j++) {
-          const mvNum = (node.ply + j) % 2 === 0 ? Math.ceil((node.ply + j + 1) / 2) + '. ' : '';
-          const sel = preview && preview.key === key && preview.lineIdx === +li && preview.moveIdx === j + 1;
-          html += '<span class="pvmove' + (sel ? ' sel' : '') + '" data-key="' + key + '" data-li="' + li + '" data-j="' + j + '">' + mvNum + esc(line.san[j]) + '</span> ';
-        }
-        html += '</span></div>';
+    for (const li of idxs) {
+      const line = curNode.lines[li];
+      if (!line.san.length) continue;
+      html += '<div class="eng-line"><span class="eng-score ' + scoreClass(line) + '">' + fmtScore(line) + '</span><span class="eng-pv">';
+      for (let j = 0; j < line.san.length; j++) {
+        const mvNum = (curNode.ply + j) % 2 === 0 ? Math.ceil((curNode.ply + j + 1) / 2) + '. ' : '';
+        const sel = preview && preview.key === key && preview.lineIdx === +li && preview.moveIdx === j + 1;
+        html += '<span class="pvmove' + (sel ? ' sel' : '') + '" data-key="' + key + '" data-li="' + li + '" data-j="' + j + '">' + mvNum + esc(line.san[j]) + '</span> ';
       }
-      html += '</div>';
+      html += '</span></div>';
     }
     $('analysis-tree').innerHTML = html;
     $('analysis-tree').querySelectorAll('.pvmove').forEach(el => {
       el.addEventListener('click', () => {
-        preview = { key: el.getAttribute('data-key'), lineIdx: +el.getAttribute('data-li'), moveIdx: +el.getAttribute('data-j') + 1 };
-        $('btn-back-game').style.display = '';
-        renderBoard();
-        scheduleTreeRender();
+        const pKey = el.getAttribute('data-key');
+        const node = engNodes.get(pKey);
+        const line = node && node.lines[+el.getAttribute('data-li')];
+        const j = +el.getAttribute('data-j') + 1;
+        if (!line || !line.fens[j]) return;
+        preview = { key: pKey, lineIdx: +el.getAttribute('data-li'), moveIdx: j, restorePly: curPly() };
+        inProgram = true;
+        try { cb().loadFEN(line.fens[j]); } catch (e) { preview = null; }
+        inProgram = false;
+        renderMoves(); renderMeta(); scheduleTreeRender();
       });
     });
     $('btn-back-game').style.display = preview ? '' : 'none';
@@ -1021,35 +1001,53 @@
     btn.textContent = engineOn ? '⏸ Движок включён' : '▶ Движок выключен';
     $('analysis-panel').style.display = engineOn ? '' : 'none';
     if (engineOn) {
-      preview = null;
       if (ensureEngine()) analyzeNow(); else renderTree();
     } else {
       if (sf) { sf.postMessage('stop'); sf.terminate(); sf = null; sfReady = false; }
-      engNodes.clear(); preview = null; engBusyKey = null; engArrow = null;
+      engNodes.clear(); preview = null; engBusyKey = null;
       setStatus('');
       $('engine-status').classList.remove('thinking');
       renderTree();
-      renderBoard();
+      // локальный вариант зрителя не трогаем — сбрасываем доску только если он не в варианте
+      if (!varMode()) syncGame();
+      bcRender();
     }
   }
 
-
-  $('btn-flip').addEventListener('click', () => { flipped = !flipped; renderBoard(); renderPlayers(); });
-  $('btn-latest').addEventListener('click', () => { follow = true; viewPly = -1; renderAll(); });
+  // ── навигация и управление ───────────────────────────────────────
+  $('nav-first').addEventListener('click', () => cb().gotoFirst());
+  $('nav-prev').addEventListener('click', () => cb().gotoPrev());
+  $('nav-next').addEventListener('click', () => cb().gotoNext());
+  $('nav-last').addEventListener('click', () => cb().gotoLast());
+  $('btn-flip').addEventListener('click', () => cb().flipBoard());
+  $('btn-latest').addEventListener('click', () => {
+    preview = null;
+    if (varMode()) { follow = true; newLiveMoves = false; syncGame(); }
+    else { cb().gotoLast(); }
+    bcRender();
+  });
   $('btn-engine').addEventListener('click', toggleEngine);
-  $('btn-back-game').addEventListener('click', () => { preview = null; $('btn-back-game').style.display = 'none'; renderBoard(); scheduleTreeRender(); });
+  $('btn-back-game').addEventListener('click', () => {
+    preview = null;
+    syncGame();
+    bcRender();
+    scheduleTreeRender();
+  });
   $('game-select').addEventListener('change', (e) => {
-    gameIdx = +e.target.value; viewPly = -1; follow = true; preview = null; renderAll();
+    gameIdx = +e.target.value; preview = null; newLiveMoves = false; follow = true; syncGame(); bcRender();
   });
 
   // стрелки ← → для листания ходов
   document.addEventListener('keydown', (e) => {
-    const g = games[gameIdx];
-    if (!g) return;
-    const max = g.hist.length;
-    const cur = (viewPly < 0) ? max : viewPly;
-    if (e.key === 'ArrowLeft' && cur > 0) { viewPly = cur - 1; follow = viewPly === max; preview = null; renderAll(); }
-    if (e.key === 'ArrowRight' && cur < max) { viewPly = cur + 1; follow = viewPly === max; preview = null; renderAll(); }
+    if (/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    if (e.key === 'ArrowLeft') { cb().gotoPrev(); e.preventDefault(); }
+    else if (e.key === 'ArrowRight') { cb().gotoNext(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { cb().gotoFirst(); e.preventDefault(); }
+    else if (e.key === 'ArrowDown') { cb().gotoLast(); e.preventDefault(); }
+    else if (e.key === 'Escape') {
+      if (preview) { preview = null; syncGame(); bcRender(); scheduleTreeRender(); }
+      else if (varMode()) { follow = true; newLiveMoves = false; syncGame(); bcRender(); }
+    }
   });
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { load(); loadChat(); } });
@@ -1078,10 +1076,13 @@
     if (msgs.length === prevLen) return; // без изменений
     box.dataset.count = msgs.length;
     const canModerate = (m) => me && (me.role === 'admin' || (me.username && me.username === m.userId));
-    box.innerHTML = msgs.map(m =>
-      '<div class="chat-msg"><span class="c-name">' + esc(m.username) + ':</span>' + esc(m.text) +
-      (canModerate(m) ? '<span class="c-del" data-mid="' + esc(m.id) + '" title="Удалить">✕</span>' : '') +
-      '</div>').join('') || '<div class="chat-hint">Пока нет сообщений.</div>';
+    box.innerHTML = msgs.map(m => {
+      const mine = me && me.username && me.username === m.userId;
+      return '<div class="chat-msg' + (mine ? ' mine' : '') + '">' +
+        '<div class="c-row"><span class="c-name">' + esc(m.username) + '</span>' +
+        (canModerate(m) ? '<span class="c-del" data-mid="' + esc(m.id) + '" title="Удалить">✕</span>' : '') +
+        '</div><div class="c-text">' + esc(m.text) + '</div></div>';
+    }).join('') || '<div class="chat-hint">Пока нет сообщений.</div>';
     box.querySelectorAll('.c-del').forEach(el => el.addEventListener('click', async () => {
       try {
         await apiPost('/broadcasts/' + encodeURIComponent(ID) + '/chat/' + encodeURIComponent(el.getAttribute('data-mid')) + '/delete');
@@ -1109,13 +1110,23 @@
   });
 
   // ── старт ────────────────────────────────────────────────────────
-  renderBoard();
   load();
   loadChat();
   setInterval(load, POLL_MS);
   setInterval(loadChat, 3000);
   // локальный тик часов каждую секунду
-  setInterval(() => { if (liveClock && !document.hidden) { renderClocksOnly(); } }, 1000);
+  setInterval(() => { if (liveClock && !document.hidden && !preview) { renderClocksOnly(); } }, 1000);
+
+  // отладка (можно вызывать из консоли): состояние часов
+  window.__bc = () => ({
+    ply: curPly(), len: histLen(),
+    varMode: varMode(),
+    newLiveMoves,
+    side: liveClock && liveClock.side,
+    base: liveClock && liveClock.base,
+    flipped: cb() && cb().flipped,
+    status: data && data.status,
+  });
 })();
 </script>
 
