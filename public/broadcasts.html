@@ -1,92 +1,176 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+<script src="/js/utils.js"></script>
 <script src="/js/api.js"></script>
+<script src="/js/toast.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Трансляции — Chess Home</title>
-  <meta name="description" content="Трансляции шахматных соревнований в реальном времени">
+  <title data-i18n="broadcasts.page_title">Трансляции — Chess Home</title>
+  <meta name="description" content="Трансляции шахматных соревнований в реальном времени — Chess Home">
   <link rel="stylesheet" href="/css/main.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+  <script src="/js/header/core.js"></script>
+  <script src="/js/header/styles.js"></script>
+  <script src="/js/header/render.js"></script>
+  <script src="/js/header/right.js"></script>
+  <script src="/js/header/api.js"></script>
+  <link rel="icon" type="image/png" href="/img/logo/favicon.png">
 <style>
-  body { background: var(--bg-primary); color: var(--text-primary); font-family: inherit; margin: 0; }
+  body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-body); }
 
-  .bc-wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 60px; padding-top: calc(var(--header-h, 60px) + 24px); }
+  /* ── PAGE ─────────────────────────────────────────────── */
+  .bc-page { max-width: 920px; margin: 0 auto; padding: 24px 20px 60px; }
 
-  .bc-title { font-size: 26px; font-weight: 700; margin: 8px 0 4px; }
-  .bc-sub { color: var(--text-secondary); font-size: 14px; margin-bottom: 20px; }
-
-  /* карточка трансляции */
-  .bc-card {
-    display: flex; align-items: center; gap: 14px;
-    background: var(--bg-card); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px;
-    cursor: pointer; transition: border-color .15s, background .15s;
+  /* ── HERO ─────────────────────────────────────────────── */
+  .bc-hero { text-align: center; padding: 28px 0 30px; position: relative; }
+  .bc-hero::before {
+    content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: min(420px, 100%); height: 210px;
+    background: radial-gradient(ellipse, rgba(201,168,76,0.13) 0%, transparent 70%);
+    pointer-events: none;
   }
-  .bc-card:hover { border-color: var(--accent-dark); background: var(--bg-hover); }
+  .bc-hero-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 56px; height: 56px; border-radius: 16px;
+    background: rgba(201,168,76,0.12); border: 1px solid rgba(201,168,76,0.28);
+    font-size: 28px; margin-bottom: 14px;
+  }
+  .bc-hero h1 {
+    font-family: var(--font-display); font-size: 40px; font-weight: 700;
+    margin: 0 0 8px; letter-spacing: -0.5px; color: var(--text-primary);
+  }
+  .bc-hero h1 span { color: var(--accent); }
+  .bc-hero p { color: var(--text-secondary); font-size: 15px; margin: 0; }
 
-  .bc-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--text-muted); }
-  .bc-dot.live { background: var(--red); animation: bcPulse 1.4s infinite; }
-  .bc-dot.upcoming { background: var(--accent); }
-  .bc-dot.finished { background: var(--text-muted); }
-  @keyframes bcPulse { 0% { box-shadow: 0 0 0 0 rgba(224,85,85,.5); } 70% { box-shadow: 0 0 0 8px rgba(224,85,85,0); } 100% { box-shadow: 0 0 0 0 rgba(224,85,85,0); } }
+  /* ── TABS ─────────────────────────────────────────────── */
+  .bc-tabs {
+    display: flex; justify-content: center; gap: 8px; margin: 0 0 22px; flex-wrap: wrap;
+  }
+  .bc-tab {
+    background: var(--bg-card); border: 1px solid var(--border); color: var(--text-secondary);
+    border-radius: 20px; padding: 7px 18px; font-size: 13px; font-weight: 600;
+    cursor: pointer; font-family: var(--font-body); transition: all .15s;
+  }
+  .bc-tab:hover { color: var(--text-primary); border-color: var(--border-light); }
+  .bc-tab.active { background: var(--accent); border-color: var(--accent); color: #161820; }
+  .bc-tab .cnt { opacity: .75; font-weight: 500; margin-left: 4px; }
+
+  /* ── CARD ─────────────────────────────────────────────── */
+  .bc-card {
+    display: flex; align-items: stretch; gap: 0;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); margin-bottom: 12px; overflow: hidden;
+    cursor: pointer; transition: transform .18s, border-color .18s, box-shadow .18s;
+    position: relative;
+  }
+  .bc-card:hover { transform: translateY(-2px); border-color: var(--accent-dark); box-shadow: 0 8px 24px rgba(0,0,0,.35), 0 0 0 1px rgba(201,168,76,.08); }
+
+  .bc-stripe { width: 4px; flex: none; background: var(--border); }
+  .bc-stripe.live { background: var(--red); }
+  .bc-stripe.upcoming { background: var(--accent); }
+  .bc-stripe.paused, .bc-stripe.pending { background: var(--text-muted); }
+  .bc-stripe.finished { background: var(--green); }
+
+  .bc-inner { flex: 1; min-width: 0; padding: 16px 18px; display: flex; align-items: center; gap: 14px; }
+
+  .bc-status-pill {
+    flex: none; display: inline-flex; align-items: center; gap: 7px;
+    font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase;
+    padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border);
+    color: var(--text-secondary); background: var(--bg-secondary);
+    min-width: 86px; justify-content: center;
+  }
+  .bc-status-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); flex: none; }
+  .bc-status-pill.live { color: var(--red); border-color: rgba(224,85,85,.45); background: rgba(224,85,85,.08); }
+  .bc-status-pill.live .dot { background: var(--red); animation: bcPulse 1.4s infinite; }
+  .bc-status-pill.upcoming { color: var(--accent-light); border-color: rgba(201,168,76,.45); background: rgba(201,168,76,.08); }
+  .bc-status-pill.upcoming .dot { background: var(--accent); }
+  .bc-status-pill.finished { color: var(--green); border-color: rgba(76,175,114,.4); background: rgba(76,175,114,.08); }
+  .bc-status-pill.finished .dot { background: var(--green); }
+  @keyframes bcPulse { 0% { box-shadow: 0 0 0 0 rgba(224,85,85,.55); } 70% { box-shadow: 0 0 0 7px rgba(224,85,85,0); } 100% { box-shadow: 0 0 0 0 rgba(224,85,85,0); } }
 
   .bc-main { flex: 1; min-width: 0; }
-  .bc-name { font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bc-players { color: var(--text-secondary); font-size: 13px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .bc-time { color: var(--text-secondary); font-size: 13px; text-align: right; flex: none; line-height: 1.5; }
-  .bc-live-badge {
-    color: var(--red); font-weight: 700; font-size: 12px; letter-spacing: .5px; text-transform: uppercase;
+  .bc-name {
+    font-family: var(--font-display); font-size: 19px; font-weight: 600; color: var(--text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;
   }
-  .bc-result-badge { color: var(--green); font-weight: 700; font-size: 12px; }
+  .bc-players {
+    color: var(--text-secondary); font-size: 13.5px; margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .bc-players b { color: var(--text-primary); font-weight: 600; }
+  .bc-meta { color: var(--text-muted); font-size: 12px; margin-top: 5px; }
+
+  .bc-right { flex: none; text-align: right; line-height: 1.6; }
+  .bc-when { color: var(--text-secondary); font-size: 13px; }
+  .bc-when b { color: var(--text-primary); font-weight: 600; }
+  .bc-result { color: var(--green); font-weight: 700; font-size: 12.5px; font-family: 'JetBrains Mono', monospace; }
+
   .bc-del {
-    flex: none; background: none; border: 1px solid var(--border); color: var(--text-secondary);
-    border-radius: 8px; width: 30px; height: 30px; cursor: pointer; font-size: 15px; line-height: 1;
+    flex: none; align-self: center; margin-right: 14px;
+    background: none; border: 1px solid var(--border); color: var(--text-secondary);
+    border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 14px; line-height: 1;
+    transition: all .15s;
   }
-  .bc-del:hover { border-color: var(--red); color: var(--red); }
+  .bc-del:hover { border-color: var(--red); color: var(--red); background: rgba(224,85,85,.08); }
 
-  .bc-empty { text-align: center; color: var(--text-secondary); padding: 50px 0; font-size: 15px; }
+  .bc-empty {
+    text-align: center; padding: 70px 20px; color: var(--text-secondary); font-size: 15px;
+    border: 1px dashed var(--border-light); border-radius: var(--radius); background: rgba(30,32,40,.4);
+  }
+  .bc-empty .big { font-size: 42px; margin-bottom: 12px; }
 
-  /* админ-форма */
-  .bc-admin { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 22px; }
-  .bc-admin h3 { margin: 0 0 12px; font-size: 15px; color: var(--accent); }
-  .bc-admin label { display: block; font-size: 12px; color: var(--text-secondary); margin: 10px 0 4px; }
-  .bc-admin input, .bc-admin textarea {
+  /* ── ADMIN FORM ───────────────────────────────────────── */
+  .bc-admin {
+    background: linear-gradient(180deg, rgba(201,168,76,.05) 0%, transparent 40%), var(--bg-card);
+    border: 1px solid var(--border-light); border-radius: 14px;
+    padding: 20px 22px; margin-bottom: 26px;
+  }
+  .bc-admin h3 {
+    margin: 0 0 16px; font-size: 14px; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 1px; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .bc-admin h3::before { content: ''; width: 20px; height: 2px; background: var(--accent); border-radius: 2px; }
+  .bc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .bc-grid .full { grid-column: 1 / -1; }
+  .bc-admin label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 5px; font-weight: 600; }
+  .bc-admin input {
     width: 100%; box-sizing: border-box; background: var(--bg-secondary); border: 1px solid var(--border);
-    color: var(--text-primary); border-radius: 8px; padding: 9px 12px; font-size: 14px;
+    color: var(--text-primary); border-radius: 8px; padding: 10px 12px; font-size: 14px;
+    font-family: var(--font-body); transition: border-color .15s;
   }
-  .bc-admin input:focus, .bc-admin textarea:focus { outline: none; border-color: var(--accent-dark); }
-  .bc-admin-row { display: flex; gap: 12px; }
-  .bc-admin-row > div { flex: 1; }
-  @media (max-width: 600px) { .bc-admin-row { flex-direction: column; gap: 0; } }
-  .bc-admin .btn { margin-top: 14px; }
-  .bc-err { color: var(--red); font-size: 13px; margin-top: 8px; min-height: 16px; }
+  .bc-admin input:focus { outline: none; border-color: var(--accent-dark); box-shadow: 0 0 0 3px rgba(201,168,76,.1); }
+  .bc-admin .btn { margin-top: 16px; }
+  .bc-err { color: var(--red); font-size: 13px; margin-top: 10px; min-height: 16px; }
+
+  @media (max-width: 640px) {
+    .bc-hero h1 { font-size: 28px; }
+    .bc-grid { grid-template-columns: 1fr; }
+    .bc-inner { flex-wrap: wrap; }
+    .bc-status-pill { order: -1; }
+    .bc-right { width: 100%; text-align: left; margin-top: 4px; }
+  }
 </style>
 </head>
 <body>
 
-<header id="header">
-  <a href="/" class="logo"><span class="logo-icon">♚</span> Chess Home</a>
-  <nav>
-    <ul class="nav-links">
-      <li><a href="/lobby">🏆 Играть</a></li>
-      <li><a href="/tv">📺 TV</a></li>
-      <li><a href="/broadcasts" class="active">📡 Трансляции</a></li>
-      <li><a href="/analysis">🔍 Анализ</a></li>
-    </ul>
-  </nav>
-  <div class="header-right" id="header-right"></div>
-</header>
+<!-- header injected by /js/header.js -->
 
-<div class="bc-wrap">
-  <div class="bc-title">📡 Трансляции</div>
-  <div class="bc-sub">Соревнования в реальном времени. Партия обновляется автоматически.</div>
+<div class="bc-page">
+
+  <!-- HERO -->
+  <div class="bc-hero">
+    <div class="bc-hero-badge">📡</div>
+    <h1>Шахматные <span>Трансляции</span></h1>
+    <p>Соревнования в реальном времени — партии обновляются автоматически</p>
+  </div>
 
   <!-- Админ: добавление трансляции -->
   <div class="bc-admin" id="bc-admin" style="display:none">
-    <h3>+ Добавить трансляцию</h3>
-    <div class="bc-admin-row">
-      <div>
+    <h3>Новая трансляция</h3>
+    <div class="bc-grid">
+      <div class="full">
         <label>Название *</label>
         <input id="f-name" maxlength="120" placeholder="FIDE World Chess Championship 2026 — Game 1">
       </div>
@@ -94,16 +178,28 @@
         <label>Дата и время начала *</label>
         <input id="f-starts" type="datetime-local">
       </div>
+      <div>
+        <label>Ссылка на раунд Lichess</label>
+        <input id="f-url" placeholder="https://lichess.org/broadcast/.../xLgOJ6cb">
+      </div>
+      <div class="full">
+        <label>Описание</label>
+        <input id="f-desc" maxlength="500" placeholder="Матч на звание чемпиона мира">
+      </div>
     </div>
-    <label>Ссылка на трансляцию Lichess (раунд)</label>
-    <input id="f-url" placeholder="https://lichess.org/broadcast/fide-world-chess-championship-2026/game-1/xLgOJ6cb">
-    <label>Описание</label>
-    <input id="f-desc" maxlength="500" placeholder="GM Gukesh D — GM Sindarov, Javokhir. Матч на звание чемпиона мира.">
-    <button class="btn btn-primary" id="f-save">Создать</button>
+    <button class="btn btn-primary" id="f-save">Создать трансляцию</button>
     <div class="bc-err" id="f-err"></div>
   </div>
 
-  <div id="bc-list"><div class="bc-empty">Загрузка…</div></div>
+  <!-- TABS -->
+  <div class="bc-tabs" id="bc-tabs" style="display:none">
+    <button class="bc-tab active" data-f="all">Все<span class="cnt" id="cnt-all"></span></button>
+    <button class="bc-tab" data-f="live">● Live<span class="cnt" id="cnt-live"></span></button>
+    <button class="bc-tab" data-f="upcoming">Скоро<span class="cnt" id="cnt-upcoming"></span></button>
+    <button class="bc-tab" data-f="finished">Завершённые<span class="cnt" id="cnt-finished"></span></button>
+  </div>
+
+  <div id="bc-list"><div class="bc-empty"><div class="big">📡</div>Загрузка…</div></div>
 </div>
 
 <script>
@@ -111,12 +207,11 @@
   'use strict';
 
   let me = null;
-  const STATUS_TEXT = {
-    live: '<span class="bc-live-badge">● Live</span>',
-    upcoming: '<span style="color:var(--accent);font-weight:600">Скоро</span>',
-    paused: '<span style="color:var(--text-muted);font-weight:600">Пауза</span>',
-    pending: '<span style="color:var(--text-muted);font-weight:600">Ожидание</span>',
-    finished: '<span class="bc-result-badge">Завершён</span>',
+  let allList = [];
+  let filter = 'all';
+
+  const STATUS_LABEL = {
+    live: 'Live', upcoming: 'Скоро', paused: 'Пауза', pending: 'Ожидание', finished: 'Финал',
   };
 
   function fmtTime(ms) {
@@ -124,42 +219,93 @@
     return new Date(ms).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
 
+  function moveWord(n) {
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return 'ход';
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'хода';
+    return 'ходов';
+  }
+
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
+  // ── header ─────────────────────────────────────────────
+  if (window.CH && typeof CH.initHeader === 'function') CH.initHeader();
+
   async function loadMe() {
     try {
       me = await apiGet('/me');
+      if (me && window.CH && typeof CH.setCurrentUser === 'function') CH.setCurrentUser(me);
       if (me && me.role === 'admin') document.getElementById('bc-admin').style.display = '';
-    } catch (e) { /* не залогинен — форму не показываем */ }
+    } catch (e) { /* не залогинен */ }
   }
 
-  async function load() {
-    let list;
-    try { list = await apiGet('/broadcasts'); }
-    catch (e) { document.getElementById('bc-list').innerHTML = '<div class="bc-empty">Не удалось загрузить список</div>'; return; }
+  // ── tabs ───────────────────────────────────────────────
+  document.getElementById('bc-tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('.bc-tab');
+    if (!b) return;
+    filter = b.getAttribute('data-f');
+    document.querySelectorAll('.bc-tab').forEach(t => t.classList.toggle('active', t === b));
+    renderList();
+  });
 
+  // ── список ─────────────────────────────────────────────
+  async function load() {
+    try { allList = await apiGet('/broadcasts'); }
+    catch (e) {
+      document.getElementById('bc-list').innerHTML =
+        '<div class="bc-empty"><div class="big">⚠️</div>Не удалось загрузить список</div>';
+      return;
+    }
+    updateTabs();
+    renderList();
+  }
+
+  function updateTabs() {
+    if (!allList.length) return;
+    document.getElementById('bc-tabs').style.display = '';
+    const cnt = (f) => allList.filter(b => (f === 'all') ? true : (f === 'live' ? (b.status === 'live' || b.status === 'paused') : b.status === f)).length;
+    document.getElementById('cnt-all').textContent = allList.length || '';
+    document.getElementById('cnt-live').textContent = cnt('live') || '';
+    document.getElementById('cnt-upcoming').textContent = cnt('upcoming') || '';
+    document.getElementById('cnt-finished').textContent = cnt('finished') || '';
+  }
+
+  function renderList() {
     const c = document.getElementById('bc-list');
-    if (!list.length) { c.innerHTML = '<div class="bc-empty">Пока нет ни одной трансляции</div>'; return; }
+    const list = allList.filter(b => (filter === 'all') ? true : (filter === 'live' ? (b.status === 'live' || b.status === 'paused') : b.status === filter));
+
+    if (!allList.length) {
+      c.innerHTML = '<div class="bc-empty"><div class="big">♟</div>Пока нет ни одной трансляции</div>';
+      return;
+    }
+    if (!list.length) {
+      c.innerHTML = '<div class="bc-empty"><div class="big">🔍</div>В этой категории ничего нет</div>';
+      return;
+    }
 
     c.innerHTML = list.map(b => {
       const del = (me && me.role === 'admin')
         ? `<button class="bc-del" data-del="${b.id}" title="Удалить">✕</button>` : '';
-      const resultLine = (b.status === 'finished' && b.result)
-        ? ` · ${esc(b.result)}` : '';
+      const players = (b.white || b.black)
+        ? `<b>${esc(b.white || '—')}</b> — <b>${esc(b.black || '—')}</b>` + (b.plies ? ` <span style="color:var(--text-muted)">· ${Math.ceil(b.plies / 2)} ${moveWord(Math.ceil(b.plies / 2))}</span>` : '')
+        : (b.description ? esc(b.description) : '');
       return `
       <div class="bc-card" data-open="${b.id}">
-        <div class="bc-dot ${b.status}"></div>
-        <div class="bc-main">
-          <div class="bc-name">${esc(b.name)}</div>
-          <div class="bc-players">${(b.white || b.black) ? esc(b.white) + ' — ' + esc(b.black) : (b.description ? esc(b.description) : '&nbsp;')}${b.plies ? ' · ходов: ' + b.plies : ''}</div>
+        <div class="bc-stripe ${esc(b.status)}"></div>
+        <div class="bc-inner">
+          <div class="bc-status-pill ${esc(b.status)}"><span class="dot"></span>${STATUS_LABEL[b.status] || ''}</div>
+          <div class="bc-main">
+            <div class="bc-name">${esc(b.name)}</div>
+            ${players ? `<div class="bc-players">${players}</div>` : ''}
+            <div class="bc-meta">Начало: ${fmtTime(b.startsAt)}</div>
+          </div>
+          <div class="bc-right">
+            ${b.status === 'finished' && b.result ? `<div class="bc-result">${esc(b.result)}</div>` : ''}
+          </div>
+          ${del}
         </div>
-        <div class="bc-time">
-          ${STATUS_TEXT[b.status] || ''}${resultLine}<br>
-          ${fmtTime(b.startsAt)}
-        </div>
-        ${del}
       </div>`;
     }).join('');
 
@@ -178,6 +324,7 @@
     });
   }
 
+  // ── создание ───────────────────────────────────────────
   async function create() {
     const err = document.getElementById('f-err');
     err.textContent = '';

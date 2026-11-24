@@ -1,49 +1,114 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+<script src="/js/utils.js"></script>
+<script src="/js/toast.js"></script>
 <script src="/js/api.js"></script>
 <script src="/js/pieces.js"></script>
 <script src="/js/vendor/chess.js"></script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Трансляция — Chess Home</title>
-  <meta name="description" content="Трансляция партии в реальном времени">
+  <meta name="description" content="Трансляция шахматной партии в реальном времени">
   <link rel="stylesheet" href="/css/main.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+  <script src="/js/header/core.js"></script>
+  <script src="/js/header/styles.js"></script>
+  <script src="/js/header/render.js"></script>
+  <script src="/js/header/right.js"></script>
+  <script src="/js/header/api.js"></script>
+  <link rel="icon" type="image/png" href="/img/logo/favicon.png">
 <style>
-  body { background: var(--bg-primary); color: var(--text-primary); margin: 0; }
+  body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-body); margin: 0; }
 
-  .bc-page { max-width: 1100px; margin: 0 auto; padding: 16px; padding-top: calc(var(--header-h, 60px) + 16px); }
+  .bc-page { max-width: 1140px; margin: 0 auto; padding: 20px 20px 50px; }
 
-  .bc-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
-  .bc-head .bc-name { font-size: 20px; font-weight: 700; }
-  .bc-badge { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 20px; border: 1px solid var(--border); color: var(--text-secondary); }
-  .bc-badge.live { color: var(--red); border-color: var(--red); animation: bcPulse 1.4s infinite; }
-  .bc-badge.finished { color: var(--green); border-color: var(--green); }
-  .bc-badge.upcoming { color: var(--accent); border-color: var(--accent-dark); }
-  @keyframes bcPulse { 0% { box-shadow: 0 0 0 0 rgba(224,85,85,.4); } 70% { box-shadow: 0 0 0 7px rgba(224,85,85,0); } 100% { box-shadow: 0 0 0 0 rgba(224,85,85,0); } }
+  /* ── шапка партии ─────────────────────────────────────── */
+  .bc-topline { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .bc-back {
+    color: var(--text-secondary); text-decoration: none; font-size: 13px; font-weight: 600;
+    padding: 5px 12px 5px 8px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg-card); transition: all .15s;
+  }
+  .bc-back:hover { color: var(--accent); border-color: var(--accent-dark); }
 
-  .bc-layout { display: flex; gap: 16px; align-items: flex-start; }
+  .bc-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 10px 0 18px; }
+  .bc-name {
+    font-family: var(--font-display); font-size: 26px; font-weight: 700; letter-spacing: -0.3px;
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .bc-badge {
+    flex: none; font-size: 11px; font-weight: 700; padding: 5px 14px; border-radius: 20px;
+    border: 1px solid var(--border); color: var(--text-secondary); background: var(--bg-card);
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+  .bc-badge.live { color: var(--red); border-color: rgba(224,85,85,.5); background: rgba(224,85,85,.08); animation: bcPulse 1.4s infinite; }
+  .bc-badge.finished { color: var(--green); border-color: rgba(76,175,114,.5); background: rgba(76,175,114,.08); }
+  .bc-badge.upcoming { color: var(--accent-light); border-color: rgba(201,168,76,.5); background: rgba(201,168,76,.08); }
+  @keyframes bcPulse { 0% { box-shadow: 0 0 0 0 rgba(224,85,85,.45); } 70% { box-shadow: 0 0 0 8px rgba(224,85,85,0); } 100% { box-shadow: 0 0 0 0 rgba(224,85,85,0); } }
+
+  select#game-select {
+    background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-primary);
+    border-radius: 8px; padding: 7px 10px; font-size: 13px; max-width: 260px; font-family: var(--font-body);
+  }
+
+  /* ── раскладка ────────────────────────────────────────── */
+  .bc-layout { display: flex; gap: 18px; align-items: flex-start; }
   .bc-board-col { flex: 1; min-width: 0; }
 
+  /* ── панели игроков ───────────────────────────────────── */
   .bc-player {
     display: flex; align-items: center; gap: 10px;
-    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 8px 14px; margin-bottom: 8px; min-height: 38px;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 10px 14px; margin-bottom: 10px; min-height: 46px;
+    transition: border-color .2s, box-shadow .2s;
   }
-  .bc-player .p-name { font-weight: 600; font-size: 15px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bc-player .p-rating { color: var(--text-secondary); font-size: 13px; }
+  .bc-player.turn { border-color: var(--accent-dark); box-shadow: 0 0 14px rgba(201,168,76,.12); }
+  .bc-player .p-chip {
+    flex: none; width: 34px; height: 34px; border-radius: 8px; overflow: hidden;
+    background: var(--bg-secondary); border: 1px solid var(--border-light);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .bc-player .p-chip img { width: 26px; height: 26px; }
+  .bc-player .p-name { font-weight: 700; font-size: 15px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bc-player .p-rating { color: var(--text-secondary); font-size: 13px; flex: none; }
   .bc-player .p-clock {
-    font-family: monospace; font-size: 18px; font-weight: 700; padding: 2px 10px;
-    border-radius: 6px; background: var(--bg-secondary); color: var(--text-secondary);
+    flex: none; font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700;
+    padding: 4px 12px; border-radius: 8px; background: var(--bg-secondary); color: var(--text-secondary);
+    min-width: 86px; text-align: center;
   }
   .bc-player .p-clock.turn { background: var(--accent); color: #161820; }
 
+  /* ── доска ────────────────────────────────────────────── */
+  .board-zone {
+    display: flex; gap: 0; max-width: 740px; margin: 0 auto;
+    align-items: stretch;
+  }
+  .eval-bar {
+    flex: none; width: 18px; margin-right: 10px; border-radius: 6px; overflow: hidden;
+    background: #26241f; border: 1px solid var(--border-light); position: relative; display: flex; flex-direction: column;
+  }
+  .eval-bar .white-part { background: #e8e2d0; transition: height .5s ease; width: 100%; margin-top: auto; }
+  .eval-bar .eval-num {
+    position: absolute; left: 50%; top: 3px; transform: translateX(-50%);
+    font-size: 8px; font-weight: 700; color: var(--text-secondary); font-family: 'JetBrains Mono', monospace;
+  }
+
+  .board-outer { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .board-center { display: flex; }
+  .rank-col {
+    flex: none; width: 18px; display: flex; flex-direction: column;
+    justify-content: space-around; align-items: center;
+    font-size: 10px; font-weight: 700; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;
+  }
+  .board-and-files { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+
   #board {
     display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr);
-    width: min(100%, calc(100vh - 250px), 720px); max-width: 720px; aspect-ratio: 1 / 1;
-    border-radius: 8px; overflow: hidden; border: 1px solid var(--border);
-    margin: 0 auto;
+    width: min(100%, calc(100vh - 280px), 700px); max-width: 700px; aspect-ratio: 1 / 1;
+    border-radius: 10px; overflow: hidden;
+    border: 1px solid rgba(201,168,76,.25);
+    box-shadow: 0 10px 34px rgba(0,0,0,.5);
+    margin: 0; flex: 1;
   }
   #board .sq { position: relative; }
   #board .sq.light { background: var(--board-light); }
@@ -51,69 +116,99 @@
   #board .sq.hl::after { content: ''; position: absolute; inset: 0; background: var(--board-highlight); }
   #board .sq img { position: absolute; inset: 0; width: 100%; height: 100%; user-select: none; pointer-events: none; }
 
-  .bc-under { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; max-width: 720px; margin-left: auto; margin-right: auto; }
+  .file-row {
+    display: grid; grid-template-columns: repeat(8, 1fr);
+    font-size: 10px; font-weight: 700; color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace; text-align: center; padding-top: 4px;
+    width: min(100%, calc(100vh - 280px), 700px); max-width: 700px;
+  }
+
+  .bc-under { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; max-width: 700px; margin-left: auto; margin-right: auto; }
   .bc-status { color: var(--text-secondary); font-size: 13px; }
   .bc-btns .btn { margin-left: 6px; }
 
-  .bc-side {
-    width: 280px; flex: none; display: flex; flex-direction: column; gap: 10px;
+  /* ── правая колонка ───────────────────────────────────── */
+  .bc-side { width: 300px; flex: none; display: flex; flex-direction: column; gap: 12px; }
+
+  .bc-panel {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; font-size: 13px; color: var(--text-secondary); line-height: 1.7;
   }
-  .bc-info { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; font-size: 13px; color: var(--text-secondary); line-height: 1.6; }
-  .bc-info b { color: var(--text-primary); }
+  .bc-panel b { color: var(--text-primary); }
+  .bc-panel h4 {
+    margin: 0 0 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--accent); font-weight: 700;
+  }
+  .bc-panel a { color: var(--accent); text-decoration: none; }
+  .bc-panel a:hover { text-decoration: underline; }
 
   #movelist {
-    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
-    flex: 1; min-height: 200px; max-height: calc(100vh - 300px); overflow-y: auto;
-    padding: 8px; display: grid; grid-template-columns: 34px 1fr 1fr; gap: 2px 4px; align-content: start;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    flex: 1; min-height: 220px; max-height: calc(100vh - 320px); overflow-y: auto;
+    padding: 10px; display: grid; grid-template-columns: 36px 1fr 1fr; gap: 2px 4px; align-content: start;
     font-size: 14px;
   }
-  #movelist .mv-num { color: var(--text-muted); text-align: right; padding: 3px 6px 3px 0; }
-  #movelist .mv { padding: 3px 8px; border-radius: 6px; cursor: pointer; color: var(--text-primary); }
+  #movelist .mv-num {
+    color: var(--text-muted); text-align: right; padding: 4px 6px 4px 0;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  }
+  #movelist .mv {
+    padding: 4px 10px; border-radius: 6px; cursor: pointer; color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace; font-size: 13.5px; transition: background .1s;
+  }
   #movelist .mv:hover { background: var(--bg-hover); }
   #movelist .mv.active { background: var(--accent-dark); color: #fff; }
 
-  .bc-empty { text-align: center; color: var(--text-secondary); padding: 60px 0; }
+  .bc-empty { text-align: center; color: var(--text-secondary); padding: 60px 20px; }
 
-  select#game-select {
-    background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-primary);
-    border-radius: 8px; padding: 6px 10px; font-size: 13px; max-width: 100%;
-  }
-
-  @media (max-width: 780px) {
-    .bc-layout { flex-direction: column; }
+  @media (max-width: 800px) {
+    .bc-layout { flex-direction: column; align-items: stretch; }
     .bc-side { width: 100%; }
+    .bc-board-col, .bc-player, .board-zone, .bc-under { width: 100%; max-width: 100%; box-sizing: border-box; }
     #movelist { max-height: 300px; }
-    #board { width: min(100%, calc(100vh - 320px)); }
+    .bc-name { font-size: 20px; white-space: normal; }
+    .eval-bar { width: 12px; margin-right: 6px; }
+    #board, .file-row { width: 100%; max-width: none; }
   }
 </style>
 </head>
 <body>
 
-<header id="header">
-  <a href="/" class="logo"><span class="logo-icon">♚</span> Chess Home</a>
-  <nav>
-    <ul class="nav-links">
-      <li><a href="/lobby">🏆 Играть</a></li>
-      <li><a href="/tv">📺 TV</a></li>
-      <li><a href="/broadcasts" class="active">📡 Трансляции</a></li>
-      <li><a href="/analysis">🔍 Анализ</a></li>
-    </ul>
-  </nav>
-  <div class="header-right" id="header-right"></div>
-</header>
+<!-- header injected by /js/header.js -->
 
 <div class="bc-page">
+  <div class="bc-topline">
+    <a class="bc-back" href="/broadcasts">← Все трансляции</a>
+    <select id="game-select" style="display:none"></select>
+  </div>
+
   <div class="bc-head">
     <div class="bc-name" id="bc-name">Загрузка…</div>
     <div class="bc-badge" id="bc-badge"></div>
-    <select id="game-select" style="display:none"></select>
   </div>
 
   <div class="bc-layout">
     <div class="bc-board-col">
-      <div class="bc-player" id="bar-top"><span class="p-name">—</span><span class="p-rating"></span><span class="p-clock">—</span></div>
-      <div id="board"></div>
-      <div class="bc-player" id="bar-bottom" style="margin-top:8px"><span class="p-name">—</span><span class="p-rating"></span><span class="p-clock">—</span></div>
+      <div class="bc-player" id="bar-top"><span class="p-chip" id="chip-top"></span><span class="p-name">—</span><span class="p-rating"></span><span class="p-clock">—</span></div>
+
+      <div class="board-zone">
+        <div class="eval-bar" id="eval-bar" style="display:none">
+          <div class="eval-num" id="eval-num"></div>
+          <div class="white-part" id="eval-white" style="height:50%"></div>
+        </div>
+        <div class="board-outer">
+          <div class="board-center">
+            <div class="rank-col" id="rank-col"></div>
+            <div class="board-and-files">
+              <div id="board"></div>
+              <div class="file-row" id="file-row"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bc-player" id="bar-bottom" style="margin-top:10px"><span class="p-chip" id="chip-bottom"></span><span class="p-name">—</span><span class="p-rating"></span><span class="p-clock">—</span></div>
+
       <div class="bc-under">
         <div class="bc-status" id="bc-status"></div>
         <div class="bc-btns">
@@ -124,7 +219,7 @@
     </div>
 
     <div class="bc-side">
-      <div class="bc-info" id="bc-info">—</div>
+      <div class="bc-panel" id="bc-info">—</div>
       <div id="movelist"></div>
     </div>
   </div>
@@ -161,8 +256,10 @@
     return new Date(ms).toLocaleString('ru-RU', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
   }
 
+  // ── header сайта ─────────────────────────────────────────────────
+  if (window.CH && typeof CH.initHeader === 'function') CH.initHeader();
+
   // ── парсинг PGN ──────────────────────────────────────────────────
-  // Возвращает массив партий: headers, san-история, FEN-позиции по ходам, часы.
   function parsePgn(pgnText) {
     const chunks = pgnText.split(/\n(?=\[Event )/).map(s => s.trim()).filter(s => s.startsWith('[Event'));
     const out = [];
@@ -178,7 +275,6 @@
         const g = new Chess();
         g.loadPgn(chunk);
         const hist = g.history({ verbose: true });
-        // FEN-позиции после каждого хода (и начальная на индексе 0)
         const tmp = new Chess();
         const fens = [tmp.fen()];
         for (const mv of hist) { try { tmp.move(mv.san); } catch (e) { break; } fens.push(tmp.fen()); }
@@ -202,6 +298,13 @@
       }
     }
     return board;
+  }
+
+  function renderCoords() {
+    const files = flipped ? ['h','g','f','e','d','c','b','a'] : ['a','b','c','d','e','f','g','h'];
+    const ranks = flipped ? [1,2,3,4,5,6,7,8] : [8,7,6,5,4,3,2,1];
+    $('rank-col').innerHTML = ranks.map(r => '<div>' + r + '</div>').join('');
+    $('file-row').innerHTML = files.map(f => '<div>' + f + '</div>').join('');
   }
 
   function renderBoard() {
@@ -233,6 +336,38 @@
         el.appendChild(cell);
       }
     }
+    renderCoords();
+  }
+
+  // ── eval-бар ─────────────────────────────────────────────────────
+  function evalAt(g, k) {
+    if (!g || !g.evals.length) return null;
+    const i = k - 1; // evals[i] соответствует ходу i+1
+    if (i < 0 || i >= g.evals.length) return i >= 0 ? g.evals[g.evals.length - 1] : null;
+    return g.evals[i];
+  }
+
+  function renderEval() {
+    const g = games[gameIdx];
+    const k = (viewPly < 0) ? (g ? g.hist.length : 0) : viewPly;
+    const e = evalAt(g, k);
+    const bar = $('eval-bar');
+    if (e == null) { bar.style.display = 'none'; return; }
+    bar.style.display = '';
+    let whitePct = 50, label = '';
+    if (e[0] === '#') {
+      const m = parseInt(e.slice(1), 10);
+      whitePct = isNaN(m) ? 50 : (m > 0 ? 100 : 0);
+      label = 'M' + Math.abs(m || 1);
+    } else {
+      const v = parseFloat(e);
+      if (isNaN(v)) { bar.style.display = 'none'; return; }
+      // мягкая нелинейность: 50 + v*~4.2, зажата в 6..94
+      whitePct = Math.max(6, Math.min(94, 50 + v * 4.2));
+      label = (v > 0 ? '+' : '') + v.toFixed(1);
+    }
+    $('eval-white').style.height = whitePct + '%';
+    $('eval-num').textContent = label;
   }
 
   // ── часы: последнее известное время каждой стороны на позиции k ──
@@ -267,17 +402,26 @@
     const topSide = flipped ? 'w' : 'b';
     const fb = (data && data.white && data.black) ? data.white + '/' + data.black : '';
 
-    const fill = (elId, side) => {
+    const fill = (elId, chipId, side) => {
       const p = playerName(g, side, fb);
       const el = $(elId);
       el.querySelector('.p-name').textContent = p.name;
       el.querySelector('.p-rating').textContent = p.elo ? '(' + p.elo + ')' : '';
       const c = el.querySelector('.p-clock');
       c.textContent = (side === 'w' ? clk.w : clk.b) || '—';
-      c.classList.toggle('turn', !!((side === 'w' ? clk.w : clk.b)) && turn === side);
+      const isTurn = !!((side === 'w' ? clk.w : clk.b)) && turn === side && data.status === 'live';
+      c.classList.toggle('turn', isTurn);
+      el.classList.toggle('turn', isTurn);
+      // фишка с фигурой цвета стороны
+      const chip = $(chipId);
+      const key = side === 'w' ? 'wK' : 'bK';
+      if (typeof PIECE_IMGS !== 'undefined' && PIECE_IMGS[key] && !chip.dataset.done) {
+        chip.innerHTML = '<img src="' + PIECE_IMGS[key] + '" alt="">';
+        chip.dataset.done = '1';
+      }
     };
-    fill('bar-top', topSide);
-    fill('bar-bottom', bottomSide);
+    fill('bar-top', 'chip-top', topSide);
+    fill('bar-bottom', 'chip-bottom', bottomSide);
   }
 
   // ── список ходов ─────────────────────────────────────────────────
@@ -304,7 +448,6 @@
       follow = false;
       renderAll();
     }));
-    // автоскролл к текущему ходу
     const act = el.querySelector('.mv.active');
     if (act) act.scrollIntoView({ block: 'nearest' });
   }
@@ -316,7 +459,7 @@
 
     const badge = $('bc-badge');
     badge.className = 'bc-badge ' + data.status;
-    badge.textContent = data.status === 'live' ? 'LIVE'
+    badge.textContent = data.status === 'live' ? '● Live'
       : data.status === 'finished' ? (data.result || 'завершён')
       : data.status === 'upcoming' ? 'скоро'
       : 'ожидание';
@@ -335,17 +478,17 @@
     }
     $('bc-status').textContent = st;
 
-    // инфо-панель
     const ev = g ? g.headers.Event : null;
     const open = g ? (g.headers.Opening ? g.headers.Opening + (g.headers.ECO ? ' (' + g.headers.ECO + ')' : '') : '') : '';
     const tc = g ? g.headers.TimeControl : null;
     $('bc-info').innerHTML =
+      '<h4>О трансляции</h4>' +
       (ev ? '<b>' + esc(ev) + '</b><br>' : '') +
-      (data.sourceUrl ? 'Источник: <a href="' + esc(data.sourceUrl) + '" target="_blank" rel="noopener" style="color:var(--accent)">lichess.org</a><br>' : '') +
+      (data.description ? esc(data.description) + '<br>' : '') +
+      (data.sourceUrl ? 'Источник: <a href="' + esc(data.sourceUrl) + '" target="_blank" rel="noopener">lichess.org</a><br>' : '') +
       (open ? 'Дебют: ' + esc(open) + '<br>' : '') +
       (tc ? 'Контроль: ' + esc(tc) : '');
 
-    // выбор партии (если в раунде несколько досок)
     const sel = $('game-select');
     if (games.length > 1) {
       sel.style.display = '';
@@ -362,7 +505,7 @@
     document.title = (data.name || 'Трансляция') + ' — Chess Home';
   }
 
-  function renderAll() { renderBoard(); renderPlayers(); renderMoves(); renderMeta(); }
+  function renderAll() { renderBoard(); renderPlayers(); renderMoves(); renderMeta(); renderEval(); }
 
   // ── загрузка данных ──────────────────────────────────────────────
   async function load() {
@@ -376,7 +519,7 @@
         $('bc-error').textContent = 'Трансляция не найдена';
         return;
       }
-      return; // сеть моргнула — попробуем на следующем тике
+      return;
     }
     data = d;
 
@@ -390,7 +533,7 @@
       }
       renderAll();
     } else {
-      renderMeta(); // статус/часы могли обновиться
+      renderMeta();
     }
   }
 
@@ -401,10 +544,20 @@
     gameIdx = +e.target.value; viewPly = -1; follow = true; renderAll();
   });
 
+  // стрелки ← → для листания ходов
+  document.addEventListener('keydown', (e) => {
+    const g = games[gameIdx];
+    if (!g) return;
+    const max = g.hist.length;
+    const cur = (viewPly < 0) ? max : viewPly;
+    if (e.key === 'ArrowLeft' && cur > 0) { viewPly = cur - 1; follow = viewPly === max; renderAll(); }
+    if (e.key === 'ArrowRight' && cur < max) { viewPly = cur + 1; follow = viewPly === max; renderAll(); }
+  });
+
   document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
 
   // ── старт ────────────────────────────────────────────────────────
-  renderBoard(); // стартовая позиция до загрузки данных
+  renderBoard();
   load();
   setInterval(load, POLL_MS);
 })();
