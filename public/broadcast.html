@@ -54,7 +54,7 @@
 
   /* ── раскладка как на странице анализа ────────────────── */
   .bc-layout { display: flex; gap: 22px; align-items: flex-start; justify-content: center; }
-  .bc-chat-col { width: 280px; flex: none; display: flex; flex-direction: column; }
+  .bc-chat-col { width: 280px; flex: none; display: flex; flex-direction: column; gap: 12px; }
   .bc-chat-col .bc-chat { flex: 1; }
   .bc-board-col { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: stretch; }
   .bc-side { flex: 1; display: flex; flex-direction: column; gap: 10px; min-width: 300px; max-width: 380px; }
@@ -213,7 +213,7 @@
   /* ── чат трансляции (слева, пузыри как в анализе) ─────── */
   .bc-chat { padding: 12px 14px; display: flex; flex-direction: column; }
   #chat-messages {
-    flex: 1; min-height: 120px; max-height: 640px; overflow-y: auto;
+    flex: 1; height: 380px; min-height: 320px; max-height: 480px; overflow-y: auto;
     display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;
     scrollbar-width: thin;
   }
@@ -260,7 +260,7 @@
     .board-wrapper { display: flex; justify-content: center; }
     #chess-board { width: min(calc(100vw - 16px), 480px) !important; height: min(calc(100vw - 16px), 480px) !important; max-width: 100% !important; }
     .eng-score-big { font-size: 24px; }
-    #chat-messages { max-height: 240px; }
+    #chat-messages { height: 240px; min-height: 240px; max-height: 240px; }
   }
 </style>
 </head>
@@ -280,8 +280,9 @@
   </div>
 
   <div class="bc-layout">
-    <!-- чат — слева, как в анализе -->
+    <!-- левая колонка: «О трансляции» сверху, под ним чат (всегда виден) -->
     <div class="bc-chat-col">
+      <div class="bc-panel" id="bc-info">—</div>
       <div class="bc-panel bc-chat" id="chat-panel">
         <h4>💬 Чат трансляции</h4>
         <div id="chat-messages"><div class="chat-hint">Загрузка…</div></div>
@@ -324,9 +325,9 @@
       </div>
     </div>
 
+    <!-- правая колонка: движок (включён по умолчанию) + список ходов -->
     <div class="bc-side">
-      <div class="bc-panel" id="bc-info">—</div>
-      <div class="bc-panel bc-analysis" id="analysis-panel" style="display:none">
+      <div class="bc-panel bc-analysis" id="analysis-panel">
         <div class="eng-head">
           <button class="eng-toggle on" id="btn-engine">⏸ Движок включён</button>
           <span class="eng-status" id="engine-status">Анализирует…</span>
@@ -380,8 +381,8 @@
   let stopped = false;
   let newLiveMoves = false;   // пока зритель в своём варианте — пришли новые ходы трансляции
 
-  // ── состояние движка ─────────────────────────────────────────────
-  let engineOn = false;
+  // ── состояние движка (включён по умолчанию — панель видна сразу) ──
+  let engineOn = true;
   let sf = null;                // Worker с stockfish.js
   let sfReady = false;
   let engNodes = new Map();     // key 'gameIdx:ply' -> { fen, ply, gameIdx, lines:{}, done }
@@ -556,8 +557,10 @@
   // ── часы: локальный тик каждую секунду ────────────────────────────
   // [%clk] в PGN стоят ПОСЛЕ каждого хода: clk[0] — время белых после
   // 1-го хода белых, clk[1] — время чёрных после их 1-го хода и т.д.
-  // Когда приходит новый ход от lichess, отсчёт стартует от текущего
-  // локального времени: remaining = база из [%clk] − (now − t_получения).
+  // Отсчёт идущей стороны стартует от момента последнего изменения PGN
+  // (lastMoveAt): remaining = база из [%clk] − (now − lastMoveAt).
+  // Поэтому после перезагрузки страницы часы НЕ сбрасываются к значению
+  // из [%clk] — учитывается время, уже потраченное на обдумывание хода.
   function parseClk(s) {
     if (!s) return null;
     const p = String(s).split(':').map(Number);
@@ -592,10 +595,15 @@
     // сыграно k полуходов: k чётное → ход белых, нечётное → чёрных.
     // ТИКАЕТ та сторона, ЧЕЙ СЕЙЧАС ХОД (а не та, что сходила).
     const side = k % 2 === 0 ? 'w' : 'b';
+    // старт отсчёта — момент последнего изменения PGN на сервере.
+    // pusher шлёт PGN только когда появился новый ход, так что
+    // lastMoveAt ≈ момент, когда идущая сторона начала думать.
+    // Math.min — защита от расхождения часов клиент/сервер.
+    const startedAt = Math.min(Date.now(), Number(data.lastMoveAt) || Date.now());
     liveClock = {
       w: ws, b: bs, side,
       base: side === 'w' ? ws : bs, // база ИДУЩЕЙ стороны
-      at: Date.now(),               // старт отсчёта — текущее локальное время
+      at: startedAt,
     };
   }
 
@@ -999,7 +1007,7 @@
     const btn = $('btn-engine');
     btn.classList.toggle('on', engineOn);
     btn.textContent = engineOn ? '⏸ Движок включён' : '▶ Движок выключен';
-    $('analysis-panel').style.display = engineOn ? '' : 'none';
+    // панель движка ВСЕГДА видна — тумблером включается только анализ
     if (engineOn) {
       if (ensureEngine()) analyzeNow(); else renderTree();
     } else {
@@ -1112,6 +1120,8 @@
   // ── старт ────────────────────────────────────────────────────────
   load();
   loadChat();
+  // движок включён по умолчанию: панель видна, воркер грузим сразу
+  if (engineOn) { ensureEngine(); renderTree(); }
   setInterval(load, POLL_MS);
   setInterval(loadChat, 3000);
   // локальный тик часов каждую секунду
