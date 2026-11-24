@@ -13,6 +13,10 @@
 //            POST /api/broadcasts          — создать трансляцию (только admin)
 //            POST /api/broadcasts/:id/delete — удалить трансляцию (только admin)
 //            POST /api/broadcasts/push     — приём PGN от скрипта на ПК (по ключу)
+// Чат трансляции:
+//            GET  /api/broadcasts/:id/chat          — последние сообщения (?after=ts — инкрементально)
+//            POST /api/broadcasts/:id/chat          — написать (только авторизованные)
+//            POST /api/broadcasts/:id/chat/:mid/delete — удалить сообщение (админ или автор)
 
 const {
   db,
@@ -57,6 +61,17 @@ module.exports = function register(app) {
         updated_at   BIGINT NOT NULL
       )
     `);
+    await db(`
+      CREATE TABLE IF NOT EXISTS broadcast_chat (
+        id           TEXT PRIMARY KEY,
+        broadcast_id TEXT NOT NULL REFERENCES broadcasts(id) ON DELETE CASCADE,
+        user_id      TEXT NOT NULL,
+        username     TEXT NOT NULL,
+        text         TEXT NOT NULL,
+        created_at   BIGINT NOT NULL
+      )
+    `);
+    await db(`CREATE INDEX IF NOT EXISTS idx_broadcast_chat ON broadcast_chat (broadcast_id, created_at)`);
   } catch (e) {
     console.error('[Broadcasts] create tables:', e.message);
   }
@@ -233,6 +248,83 @@ app.post('/api/broadcasts', authMiddleware, async (req, res) => {
     console.log(`[Broadcasts] Создана трансляция "${nameClean}" (${id}) админом ${req.user.username}`);
     res.json({ ok: true, id });
   });
+});
+
+// ── Чат трансляции ─────────────────────────────────────────────────
+
+app.get('/api/broadcasts/:id/chat', async (req, res) => {
+  try {
+    const after = Number(req.query.after) || 0;
+    const r = after
+      ? await db(
+          `SELECT id, user_id, username, text, created_at FROM broadcast_chat
+           WHERE broadcast_id = $1 AND created_at > $2
+           ORDER BY created_at ASC LIMIT 100`,
+          [String(req.params.id), after])
+      : await db(
+          `SELECT id, user_id, username, text, created_at FROM (
+             SELECT id, user_id, username, text, created_at FROM broadcast_chat
+             WHERE broadcast_id = $1 ORDER BY created_at DESC LIMIT 100
+           ) t ORDER BY created_at ASC`,
+          [String(req.params.id)]);
+    res.json({ messages: r.rows.map(m => ({
+      id: m.id, userId: m.user_id, username: m.username,
+      text: m.text, createdAt: Number(m.created_at),
+    })) });
+  } catch (e) {
+    console.error('[Broadcasts] chat get:', e.message);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+app.post('/api/broadcasts/:id/chat',
+  rateLimit(limiterStrict, 'Слишком много сообщений. Подождите немного.'),
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const text = String((req.body || {}).text || '').trim();
+      if (!text || text.length > 300) {
+        return res.status(400).json({ error: 'Сообщение пустое или длиннее 300 символов' });
+      }
+      const b = await db(`SELECT id FROM broadcasts WHERE id = $1`, [String(req.params.id)]);
+      if (!b.rows.length) return res.status(404).json({ error: 'Трансляция не найдена' });
+
+      const id = uuidv4();
+      const now = Date.now();
+      await db(
+        `INSERT INTO broadcast_chat (id, broadcast_id, user_id, username, text, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [id, String(req.params.id),
+         String(req.user.username || 'user'),
+         String(req.user.username || 'user'),
+         text, now]);
+      res.json({ ok: true, id });
+    } catch (e) {
+      console.error('[Broadcasts] chat post:', e.message);
+      res.status(500).json({ error: 'Ошибка сервера' });
+    }
+  });
+
+// Удалить сообщение: админ сайта ИЛИ автор сообщения (модерация).
+app.post('/api/broadcasts/:id/chat/:mid/delete', authMiddleware, async (req, res) => {
+  try {
+    const m = await db(
+      `SELECT id, user_id FROM broadcast_chat WHERE id = $1 AND broadcast_id = $2`,
+      [String(req.params.mid), String(req.params.id)]);
+    if (!m.rows.length) return res.status(404).json({ error: 'Сообщение не найдено' });
+    const isAuthor = m.rows[0].user_id === String(req.user.username || '');
+    if (!isAuthor) {
+      return await requireAdmin(req, res, async () => {
+        await db(`DELETE FROM broadcast_chat WHERE id = $1`, [String(req.params.mid)]);
+        res.json({ ok: true });
+      });
+    }
+    await db(`DELETE FROM broadcast_chat WHERE id = $1`, [String(req.params.mid)]);
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[Broadcasts] chat delete:', e.message);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
 });
 
 // ── API: удалить трансляцию (только админ). DELETE-метод режется

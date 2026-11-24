@@ -102,15 +102,21 @@
   }
   .board-and-files { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
+  .board-wrap {
+    position: relative;
+    width: min(100%, calc(100vh - 280px), 700px); max-width: 700px;
+  }
+  #ann-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; }
   #board {
     display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr);
-    width: min(100%, calc(100vh - 280px), 700px); max-width: 700px; aspect-ratio: 1 / 1;
+    width: 100%; aspect-ratio: 1 / 1;
     border-radius: 10px; overflow: hidden;
     border: 1px solid rgba(201,168,76,.25);
     box-shadow: 0 10px 34px rgba(0,0,0,.5);
     margin: 0; flex: 1;
   }
   #board .sq { position: relative; }
+  #board .sq.rmb-hover::after { content: ''; position: absolute; inset: 0; background: rgba(255,255,255,.22); }
   #board .sq.light { background: var(--board-light); }
   #board .sq.dark  { background: var(--board-dark); }
   #board .sq.hl::after { content: ''; position: absolute; inset: 0; background: var(--board-highlight); }
@@ -120,7 +126,7 @@
     display: grid; grid-template-columns: repeat(8, 1fr);
     font-size: 10px; font-weight: 700; color: var(--text-muted);
     font-family: 'JetBrains Mono', monospace; text-align: center; padding-top: 4px;
-    width: min(100%, calc(100vh - 280px), 700px); max-width: 700px;
+    width: 100%; max-width: 700px;
   }
 
   .bc-under { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; max-width: 700px; margin-left: auto; margin-right: auto; }
@@ -161,9 +167,39 @@
 
   .bc-empty { text-align: center; color: var(--text-secondary); padding: 60px 20px; }
 
-  /* ── панель анализа ───────────────────────────────────── */
+  /* ── панель анализа (как в анализе: большая оценка + глубина/ход + PV) ── */
   .bc-analysis { padding: 12px 14px; }
-  .eng-status { color: var(--text-muted); font-weight: 500; text-transform: none; letter-spacing: 0; font-size: 11px; }
+  .eng-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .eng-toggle {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-size: 12.5px; font-weight: 700; font-family: var(--font-body);
+    padding: 6px 14px; border-radius: 20px; cursor: pointer; transition: all .15s;
+    background: var(--bg-secondary); color: var(--text-secondary);
+    border: 1px solid var(--border);
+  }
+  .eng-toggle.on { background: var(--accent); color: #161820; border-color: var(--accent-dark); }
+  .eng-status { color: var(--text-muted); font-weight: 500; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .eng-status.thinking::before {
+    content: ''; display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--green); margin-right: 5px; animation: bcPulse 1.4s infinite;
+  }
+  .eng-main {
+    background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px 11px; margin-bottom: 10px; text-align: center;
+  }
+  .eng-score-big {
+    font-family: 'JetBrains Mono', monospace; font-size: 30px; font-weight: 700;
+    color: var(--text-primary); line-height: 1.1; letter-spacing: -0.5px;
+    transition: color .2s;
+  }
+  .eng-score-big.w { color: var(--green); }
+  .eng-score-big.b { color: var(--red); }
+  .eng-score-big.m { color: var(--accent-light); }
+  .eng-meta {
+    display: flex; justify-content: center; gap: 14px; margin-top: 5px;
+    font-size: 12px; color: var(--text-secondary);
+  }
+  .eng-meta b { color: var(--text-primary); font-family: 'JetBrains Mono', monospace; }
   .eng-hint { color: var(--text-muted); font-size: 12px; line-height: 1.6; }
   .eng-node { margin: 0 0 12px; }
   .eng-node:last-child { margin-bottom: 4px; }
@@ -195,6 +231,34 @@
   .eng-pv .pvmove.sel { background: var(--accent-dark); color: #fff; }
   #btn-back-game { margin-top: 8px; }
 
+  /* ── чат трансляции ──────────────────────────────────── */
+  .bc-chat { padding: 12px 14px; display: flex; flex-direction: column; }
+  #chat-messages {
+    max-height: 280px; min-height: 120px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px;
+    scrollbar-width: thin;
+  }
+  .chat-msg { font-size: 13px; line-height: 1.5; word-break: break-word; animation: engIn .2s ease; }
+  .chat-msg .c-name { font-weight: 700; color: var(--accent-light); margin-right: 6px; }
+  .chat-msg .c-del {
+    cursor: pointer; color: var(--text-muted); margin-left: 6px; font-size: 11px;
+    user-select: none; transition: color .1s;
+  }
+  .chat-msg .c-del:hover { color: var(--red); }
+  .chat-hint { color: var(--text-muted); font-size: 12px; }
+  .chat-hint a { color: var(--accent); }
+  #chat-form { display: flex; gap: 6px; }
+  #chat-input {
+    flex: 1; min-width: 0; background: var(--bg-secondary); border: 1px solid var(--border);
+    color: var(--text-primary); border-radius: 8px; padding: 8px 10px; font-size: 13px;
+    font-family: var(--font-body); outline: none;
+  }
+  #chat-input:focus { border-color: var(--accent-dark); }
+  #chat-send { flex: none; }
+
+  .p-clock.low { background: rgba(224,85,85,.15); color: var(--red); }
+  .p-clock.low.turn { background: var(--red); color: #fff; }
+
   @media (max-width: 800px) {
     .bc-layout { flex-direction: column; align-items: stretch; }
     .bc-side { width: 100%; }
@@ -202,7 +266,9 @@
     #movelist { max-height: 300px; }
     .bc-name { font-size: 20px; white-space: normal; }
     .eval-bar { width: 12px; margin-right: 6px; }
-    #board, .file-row { width: 100%; max-width: none; }
+    #board, .file-row, .board-wrap { width: 100%; max-width: none; }
+    .eng-score-big { font-size: 24px; }
+    #chat-messages { max-height: 200px; }
   }
 </style>
 </head>
@@ -234,7 +300,10 @@
           <div class="board-center">
             <div class="rank-col" id="rank-col"></div>
             <div class="board-and-files">
-              <div id="board"></div>
+              <div class="board-wrap">
+                <div id="board"></div>
+                <svg id="ann-svg" viewBox="0 0 8 8" preserveAspectRatio="none"></svg>
+              </div>
               <div class="file-row" id="file-row"></div>
             </div>
           </div>
@@ -256,11 +325,30 @@
     <div class="bc-side">
       <div class="bc-panel" id="bc-info">—</div>
       <div class="bc-panel bc-analysis" id="analysis-panel" style="display:none">
-        <h4>🔬 Анализ движком <span id="engine-status" class="eng-status"></span></h4>
-        <div id="analysis-tree"><div class="eng-hint">Движок запускается при первом включении. Варианты появятся здесь.</div></div>
+        <div class="eng-head">
+          <button class="eng-toggle on" id="btn-engine">⏸ Движок включён</button>
+          <span class="eng-status" id="engine-status">Анализирует…</span>
+        </div>
+        <div class="eng-main">
+          <div class="eng-score-big" id="eng-score">—</div>
+          <div class="eng-meta">
+            <span>Глубина: <b id="eng-depth">—</b></span>
+            <span>Лучший ход: <b id="eng-best">—</b></span>
+          </div>
+        </div>
+        <div id="analysis-tree"><div class="eng-hint">Варианты появятся здесь. Клик по ходу — превью на доске.</div></div>
         <button class="btn btn-ghost btn-sm" id="btn-back-game" style="display:none">⤺ Вернуться к партии</button>
       </div>
       <div id="movelist"></div>
+      <div class="bc-panel bc-chat" id="chat-panel">
+        <h4>💬 Чат трансляции</h4>
+        <div id="chat-messages"><div class="chat-hint">Загрузка…</div></div>
+        <form id="chat-form" style="display:none">
+          <input id="chat-input" maxlength="300" placeholder="Сообщение…" autocomplete="off">
+          <button type="submit" class="btn btn-primary btn-sm" id="chat-send">➤</button>
+        </form>
+        <div class="chat-hint" id="chat-login-hint" style="display:none">Войдите на сайт, чтобы писать в чат.</div>
+      </div>
     </div>
   </div>
 
@@ -295,6 +383,10 @@
 
   // ── утилиты ──────────────────────────────────────────────────────
   const $ = (id) => document.getElementById(id);
+
+  // кто смотрит (для чата: право удаления своих/любых сообщений)
+  let me = null;
+  apiGet('/me').then(u => { me = u; initChat(); }).catch(() => initChat());
 
   function esc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -387,9 +479,11 @@
       for (const f of files) {
         const sq = f + r;
         const cell = document.createElement('div');
-        // a1 должна быть тёмной: (file + rank) нечётное → тёмное поле
-        const dark = (files.indexOf(f) + r) % 2 === 1;
+        // a1 должна быть тёмной: считаем по АБСОЛЮТНОИ индексу файла,
+        // чтобы окраска не ломалась при перевороте доски
+        const dark = ('abcdefgh'.indexOf(f) + r) % 2 === 1;
         cell.className = 'sq ' + (dark ? 'dark' : 'light');
+        cell.dataset.sq = sq;
         if (lastMove && (lastMove.from === sq || lastMove.to === sq)) cell.classList.add('hl');
         const p = board[sq];
         if (p) {
@@ -402,7 +496,90 @@
       }
     }
     renderCoords();
+    drawAnnotations();
   }
+
+  // ── аннотации: стрелки и кружки (правая кнопка мыши) ────────────
+  const ANN_COLORS = ['#15781B', '#882020', '#003088', '#e68f00'];
+  let anns = [];          // { type:'arrow'|'circle', from,to,sq, color }
+  let engArrow = null;    // { from, to } — лучший ход движка
+  let rmbDown = null;     // { sq, x, y }
+
+  function sqPos(sq) {
+    const fi = 'abcdefgh'.indexOf(sq[0]);
+    const rk = parseInt(sq[1], 10);
+    const x = flipped ? 7 - fi : fi;
+    const y = flipped ? rk - 1 : 8 - rk;
+    return { x: x + 0.5, y: y + 0.5 };
+  }
+
+  function drawAnnotations() {
+    const svg = $('ann-svg');
+    if (!svg) return;
+    const defs = ANN_COLORS.map((c, i) =>
+      `<marker id="ah${i}" viewBox="0 0 10 10" refX="6.5" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 Z" fill="${c}"/></marker>`
+    ).join('');
+    let body = '';
+    for (const a of anns) {
+      const ci = ANN_COLORS.indexOf(a.color);
+      if (a.type === 'circle') {
+        const p = sqPos(a.sq);
+        body += `<circle cx="${p.x}" cy="${p.y}" r="0.46" fill="none" stroke="${a.color}" stroke-width="0.09" opacity="0.8"/>`;
+      } else {
+        const p1 = sqPos(a.from), p2 = sqPos(a.to);
+        const dx = p2.x - p1.x, dy = p2.y - p1.y, len = Math.hypot(dx, dy) || 1;
+        const ex = p2.x - dx / len * 0.32, ey = p2.y - dy / len * 0.32;
+        body += `<line x1="${p1.x}" y1="${p1.y}" x2="${ex}" y2="${ey}" stroke="${a.color}" stroke-width="0.16" stroke-linecap="round" opacity="0.75" marker-end="url(#ah${ci})"/>`;
+      }
+    }
+    if (engArrow && !preview) {
+      const p1 = sqPos(engArrow.from), p2 = sqPos(engArrow.to);
+      const dx = p2.x - p1.x, dy = p2.y - p1.y, len = Math.hypot(dx, dy) || 1;
+      const ex = p2.x - dx / len * 0.32, ey = p2.y - dy / len * 0.32;
+      body += `<line x1="${p1.x}" y1="${p1.y}" x2="${ex}" y2="${ey}" stroke="#003088" stroke-width="0.16" stroke-linecap="round" opacity="0.8" marker-end="url(#ah2)"/>`;
+    }
+    svg.innerHTML = `<defs>${defs}</defs>${body}`;
+  }
+
+  function toggleAnn(a) {
+    const idx = anns.findIndex(x => x.type === a.type &&
+      (a.type === 'circle' ? x.sq === a.sq : (x.from === a.from && x.to === a.to)));
+    if (idx >= 0) {
+      const cur = anns[idx];
+      const next = ANN_COLORS[(ANN_COLORS.indexOf(cur.color) + 1) % ANN_COLORS.length];
+      if (next === cur.color || (cur.color === a.color)) anns.splice(idx, 1);
+      else anns[idx].color = next;
+    } else {
+      anns.push(a);
+    }
+    drawAnnotations();
+  }
+
+  const boardEl = $('board');
+  boardEl.addEventListener('contextmenu', e => e.preventDefault());
+  boardEl.addEventListener('mousedown', (e) => {
+    if (e.button !== 2) return;
+    const cell = e.target.closest('.sq');
+    if (!cell) return;
+    rmbDown = { sq: cell.dataset.sq, x: e.clientX, y: e.clientY };
+    cell.classList.add('rmb-hover');
+  });
+  window.addEventListener('mouseup', (e) => {
+    if (e.button !== 2 || !rmbDown) return;
+    const cell = document.elementFromPoint(e.clientX, e.clientY);
+    const target = cell && cell.closest ? cell.closest('#board .sq') : null;
+    const endSq = target ? target.dataset.sq : null;
+    document.querySelectorAll('#board .rmb-hover').forEach(el => el.classList.remove('rmb-hover'));
+    if (endSq && endSq !== rmbDown.sq) {
+      toggleAnn({ type: 'arrow', from: rmbDown.sq, to: endSq, color: ANN_COLORS[0] });
+    } else if (endSq === rmbDown.sq) {
+      toggleAnn({ type: 'circle', sq: rmbDown.sq, color: ANN_COLORS[0] });
+    }
+    rmbDown = null;
+  });
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && anns.length) { anns = []; drawAnnotations(); }
+  });
 
   // ── eval-бар ─────────────────────────────────────────────────────
   function evalAt(g, k) {
@@ -444,6 +621,56 @@
     return { w, b };
   }
 
+  // ── часы: локальный тик каждую секунду ────────────────────────────
+  // Когда приходит новый ход от lichess, отсчёт стартует от текущего
+  // локального времени: remaining = база из [%clk] − (now − anchor).
+  function parseClk(s) {
+    if (!s) return null;
+    const p = String(s).split(':').map(Number);
+    if (p.some(isNaN)) return null;
+    if (p.length === 3) return p[0] * 3600 + p[1] * 60 + p[2];
+    if (p.length === 2) return p[0] * 60 + p[1];
+    return null;
+  }
+  function fmtClock(sec) {
+    if (sec == null) return '—';
+    sec = Math.max(0, Math.floor(sec));
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    const mm = String(m).padStart(2, '0'), ss = String(s).padStart(2, '0');
+    return (h ? h + ':' + mm : m) + ':' + ss;
+  }
+  let liveClock = null; // { w, b, side, base, at }
+
+  function computeLiveClock(g, k) {
+    liveClock = null;
+    if (!g || !data || data.status !== 'live' || k !== g.hist.length || !g.clk.length) return;
+    const c = clocksAt(g, k);
+    const ws = parseClk(c.w), bs = parseClk(c.b);
+    if (ws == null && bs == null) return;
+    const side = k % 2 === 0 ? 'w' : 'b';
+    liveClock = {
+      w: ws, b: bs, side,
+      base: side === 'w' ? ws : bs,
+      at: Date.now(), // старт отсчёта — текущее локальное время
+    };
+  }
+
+  function renderClocksOnly() {
+    if (!liveClock) return;
+    const rem = Math.max(0, liveClock.base - (Date.now() - liveClock.at) / 1000);
+    // у идущего сторону — локальный отсчёт, у второй — последнее известное
+    const clockOf = (side) => side === liveClock.side
+      ? rem
+      : (side === 'w' ? liveClock.w : liveClock.b);
+    const fill = (elId, side) => {
+      const c = $(elId).querySelector('.p-clock');
+      c.textContent = fmtClock(clockOf(side));
+      c.classList.toggle('low', side === liveClock.side && rem < 30);
+    };
+    fill('bar-top', flipped ? 'b' : 'w');
+    fill('bar-bottom', flipped ? 'w' : 'b');
+  }
+
   // ── панели игроков ───────────────────────────────────────────────
   function playerName(g, side, fallback) {
     if (g && g.headers[side === 'w' ? 'White' : 'Black']) {
@@ -462,6 +689,12 @@
     const k = (viewPly < 0) ? (g ? g.hist.length : 0) : viewPly;
     const turn = k % 2 === 0 ? 'w' : 'b';
     const clk = g ? clocksAt(g, k) : { w: null, b: null };
+    computeLiveClock(g, k);
+    // на последнем ходе живой трансляции — локальный отсчёт
+    if (liveClock) {
+      const rem = Math.max(0, liveClock.base - (Date.now() - liveClock.at) / 1000);
+      if (liveClock.side === 'w') clk.w = fmtClock(rem); else clk.b = fmtClock(rem);
+    }
 
     const bottomSide = flipped ? 'b' : 'w';
     const topSide = flipped ? 'w' : 'b';
@@ -487,6 +720,7 @@
     };
     fill('bar-top', 'chip-top', topSide);
     fill('bar-bottom', 'chip-bottom', bottomSide);
+    renderClocksOnly();
   }
 
   // ── список ходов ─────────────────────────────────────────────────
@@ -720,6 +954,27 @@
 
   function renderTree() {
     if (!engineOn) { $('analysis-tree').innerHTML = '<div class="eng-hint">Анализ выключен.</div>'; return; }
+    // шапка оценки — как в анализе: большая цифра + глубина + лучший ход
+    const curNode = engNodes.get(currentKey());
+    const main = curNode && curNode.lines[1];
+    if (main && main.san.length) {
+      const sc = $('eng-score');
+      sc.textContent = fmtScore(main);
+      sc.className = 'eng-score-big ' + scoreClass(main);
+      $('eng-depth').textContent = main.depth;
+      $('eng-best').textContent = main.san[0];
+      engArrow = { from: main.pvUci[0].slice(0, 2), to: main.pvUci[0].slice(2, 4) };
+      setStatus(curNode.done ? 'готов' : 'Анализирует…');
+      $('engine-status').classList.toggle('thinking', !curNode.done);
+    } else {
+      $('eng-score').textContent = '—'; $('eng-score').className = 'eng-score-big';
+      $('eng-depth').textContent = '—'; $('eng-best').textContent = '—';
+      engArrow = null;
+      setStatus('Анализирует…');
+      $('engine-status').classList.add('thinking');
+    }
+    drawAnnotations();
+
     const keys = [...engNodes.keys()].sort((a, b) => (+a.split(':')[1]) - (+b.split(':')[1]));
     if (!keys.length) { $('analysis-tree').innerHTML = '<div class="eng-hint">Варианты появятся здесь…</div>'; return; }
 
@@ -761,16 +1016,18 @@
 
   function toggleEngine() {
     engineOn = !engineOn;
-    $('btn-engine').classList.toggle('btn-primary', engineOn);
-    $('btn-engine').classList.toggle('btn-ghost', !engineOn);
+    const btn = $('btn-engine');
+    btn.classList.toggle('on', engineOn);
+    btn.textContent = engineOn ? '⏸ Движок включён' : '▶ Движок выключен';
     $('analysis-panel').style.display = engineOn ? '' : 'none';
     if (engineOn) {
       preview = null;
       if (ensureEngine()) analyzeNow(); else renderTree();
     } else {
       if (sf) { sf.postMessage('stop'); sf.terminate(); sf = null; sfReady = false; }
-      engNodes.clear(); preview = null; engBusyKey = null;
+      engNodes.clear(); preview = null; engBusyKey = null; engArrow = null;
       setStatus('');
+      $('engine-status').classList.remove('thinking');
       renderTree();
       renderBoard();
     }
@@ -795,12 +1052,70 @@
     if (e.key === 'ArrowRight' && cur < max) { viewPly = cur + 1; follow = viewPly === max; preview = null; renderAll(); }
   });
 
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { load(); loadChat(); } });
+
+  // ── чат трансляции ────────────────────────────────────────────────
+  let chatLoaded = false;
+  function initChat() {
+    if (me) {
+      $('chat-form').style.display = '';
+    } else {
+      $('chat-login-hint').style.display = '';
+      $('chat-login-hint').innerHTML = '<a href="/login">Войдите</a> на сайт, чтобы писать в чат.';
+    }
+  }
+
+  async function loadChat() {
+    if (!ID) return;
+    let msgs;
+    try { msgs = (await apiGet('/broadcasts/' + encodeURIComponent(ID) + '/chat')).messages || []; }
+    catch (e) { return; }
+    const box = $('chat-messages');
+    if (!msgs.length && !chatLoaded) { box.innerHTML = '<div class="chat-hint">Пока нет сообщений — напишите первым!</div>'; chatLoaded = true; return; }
+    chatLoaded = true;
+    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+    const prevLen = box.dataset.count ? +box.dataset.count : -1;
+    if (msgs.length === prevLen) return; // без изменений
+    box.dataset.count = msgs.length;
+    const canModerate = (m) => me && (me.role === 'admin' || (me.username && me.username === m.userId));
+    box.innerHTML = msgs.map(m =>
+      '<div class="chat-msg"><span class="c-name">' + esc(m.username) + ':</span>' + esc(m.text) +
+      (canModerate(m) ? '<span class="c-del" data-mid="' + esc(m.id) + '" title="Удалить">✕</span>' : '') +
+      '</div>').join('') || '<div class="chat-hint">Пока нет сообщений.</div>';
+    box.querySelectorAll('.c-del').forEach(el => el.addEventListener('click', async () => {
+      try {
+        await apiPost('/broadcasts/' + encodeURIComponent(ID) + '/chat/' + encodeURIComponent(el.getAttribute('data-mid')) + '/delete');
+        box.dataset.count = '';
+        loadChat();
+      } catch (e) { /* нет прав */ }
+    }));
+    if (nearBottom) box.scrollTop = box.scrollHeight;
+  }
+
+  $('chat-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const inp = $('chat-input');
+    const text = inp.value.trim();
+    if (!text) return;
+    inp.value = '';
+    try {
+      await apiPost('/broadcasts/' + encodeURIComponent(ID) + '/chat', { text });
+      $('chat-messages').dataset.count = '';
+      loadChat();
+    } catch (err) {
+      inp.value = text;
+      if (typeof toast === 'function') toast(err.message || 'Не удалось отправить', 'error');
+    }
+  });
 
   // ── старт ────────────────────────────────────────────────────────
   renderBoard();
   load();
+  loadChat();
   setInterval(load, POLL_MS);
+  setInterval(loadChat, 3000);
+  // локальный тик часов каждую секунду
+  setInterval(() => { if (liveClock && !document.hidden) { renderClocksOnly(); } }, 1000);
 })();
 </script>
 
