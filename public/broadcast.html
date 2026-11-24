@@ -161,6 +161,40 @@
 
   .bc-empty { text-align: center; color: var(--text-secondary); padding: 60px 20px; }
 
+  /* ── панель анализа ───────────────────────────────────── */
+  .bc-analysis { padding: 12px 14px; }
+  .eng-status { color: var(--text-muted); font-weight: 500; text-transform: none; letter-spacing: 0; font-size: 11px; }
+  .eng-hint { color: var(--text-muted); font-size: 12px; line-height: 1.6; }
+  .eng-node { margin: 0 0 12px; }
+  .eng-node:last-child { margin-bottom: 4px; }
+  .eng-node-title {
+    font-size: 11px; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .8px; margin-bottom: 5px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .eng-node-title .cur-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .eng-line {
+    display: flex; align-items: baseline; gap: 7px;
+    padding: 5px 8px; border-radius: 7px; margin-bottom: 3px;
+    background: var(--bg-secondary); border: 1px solid var(--border);
+    animation: engIn .25s ease;
+    flex-wrap: wrap;
+  }
+  .eng-line:hover { border-color: var(--border-light); }
+  @keyframes engIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  .eng-score {
+    flex: none; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700;
+    padding: 1px 7px; border-radius: 6px; min-width: 46px; text-align: center;
+  }
+  .eng-score.w { background: rgba(76,175,114,.12); color: var(--green); }
+  .eng-score.b { background: rgba(224,85,85,.12); color: var(--red); }
+  .eng-score.m { background: rgba(201,168,76,.15); color: var(--accent-light); }
+  .eng-pv { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text-secondary); line-height: 1.7; word-spacing: 2px; }
+  .eng-pv .pvmove { cursor: pointer; padding: 1px 3px; border-radius: 4px; color: var(--text-primary); transition: background .1s; }
+  .eng-pv .pvmove:hover { background: var(--bg-hover); color: var(--accent-light); }
+  .eng-pv .pvmove.sel { background: var(--accent-dark); color: #fff; }
+  #btn-back-game { margin-top: 8px; }
+
   @media (max-width: 800px) {
     .bc-layout { flex-direction: column; align-items: stretch; }
     .bc-side { width: 100%; }
@@ -212,6 +246,7 @@
       <div class="bc-under">
         <div class="bc-status" id="bc-status"></div>
         <div class="bc-btns">
+          <button class="btn btn-ghost btn-sm" id="btn-engine">🔬 Анализ</button>
           <button class="btn btn-ghost btn-sm" id="btn-latest" style="display:none">⏭ К последнему ходу</button>
           <button class="btn btn-ghost btn-sm" id="btn-flip">⇅ Перевернуть</button>
         </div>
@@ -220,6 +255,11 @@
 
     <div class="bc-side">
       <div class="bc-panel" id="bc-info">—</div>
+      <div class="bc-panel bc-analysis" id="analysis-panel" style="display:none">
+        <h4>🔬 Анализ движком <span id="engine-status" class="eng-status"></span></h4>
+        <div id="analysis-tree"><div class="eng-hint">Движок запускается при первом включении. Варианты появятся здесь.</div></div>
+        <button class="btn btn-ghost btn-sm" id="btn-back-game" style="display:none">⤺ Вернуться к партии</button>
+      </div>
       <div id="movelist"></div>
     </div>
   </div>
@@ -243,6 +283,15 @@
   let flipped = false;
   let lastUpdatedAt = null;
   let stopped = false;
+
+  // ── состояние движка ─────────────────────────────────────────────
+  let engineOn = false;
+  let sf = null;                // Worker с stockfish.js
+  let sfReady = false;
+  let engNodes = new Map();     // key 'gameIdx:ply' -> { fen, ply, gameIdx, lines:{}, done }
+  let engBusyKey = null;        // что сейчас считает движок
+  let preview = null;           // { key, lineIdx, moveIdx } — превью варианта на доске
+  let treeDirty = false;
 
   // ── утилиты ──────────────────────────────────────────────────────
   const $ = (id) => document.getElementById(id);
@@ -310,8 +359,23 @@
   function renderBoard() {
     const g = games[gameIdx];
     const k = (viewPly < 0) ? (g ? g.hist.length : 0) : viewPly;
-    const fen = g ? g.fens[Math.min(k, g.fens.length - 1)] : new Chess().fen();
-    const lastMove = (g && k > 0) ? g.hist[k - 1] : null;
+    let fen, lastMove;
+
+    if (preview) {
+      // превью варианта из дерева анализа
+      const node = engNodes.get(preview.key);
+      const line = node && node.lines[preview.lineIdx];
+      if (line && line.fens && line.fens[preview.moveIdx]) {
+        fen = line.fens[preview.moveIdx];
+        const uci = line.pvUci[preview.moveIdx - 1] || '';
+        lastMove = { from: uci.slice(0, 2), to: uci.slice(2, 4) };
+      } else { preview = null; }
+    }
+
+    if (!preview) {
+      fen = g ? g.fens[Math.min(k, g.fens.length - 1)] : new Chess().fen();
+      lastMove = (g && k > 0) ? g.hist[k - 1] : null;
+    }
 
     const board = fenBoard(fen);
     const el = $('board');
@@ -323,7 +387,8 @@
       for (const f of files) {
         const sq = f + r;
         const cell = document.createElement('div');
-        const dark = (files.indexOf(f) + r) % 2 === 0;
+        // a1 должна быть тёмной: (file + rank) нечётное → тёмное поле
+        const dark = (files.indexOf(f) + r) % 2 === 1;
         cell.className = 'sq ' + (dark ? 'dark' : 'light');
         if (lastMove && (lastMove.from === sq || lastMove.to === sq)) cell.classList.add('hl');
         const p = board[sq];
@@ -446,6 +511,8 @@
     el.querySelectorAll('.mv').forEach(m => m.addEventListener('click', () => {
       viewPly = +m.getAttribute('data-ply');
       follow = false;
+      preview = null;
+      $('btn-back-game').style.display = 'none';
       renderAll();
     }));
     const act = el.querySelector('.mv.active');
@@ -505,7 +572,7 @@
     document.title = (data.name || 'Трансляция') + ' — Chess Home';
   }
 
-  function renderAll() { renderBoard(); renderPlayers(); renderMoves(); renderMeta(); renderEval(); }
+  function renderAll() { renderBoard(); renderPlayers(); renderMoves(); renderMeta(); renderEval(); if (engineOn) analyzeNow(); }
 
   // ── загрузка данных ──────────────────────────────────────────────
   async function load() {
@@ -537,11 +604,185 @@
     }
   }
 
-  // ── контролы ─────────────────────────────────────────────────────
+  // ── движок: анализ вариантов ─────────────────────────────────────
+  const ENGINE_DEPTH = 10;
+  const ENGINE_LINES = 3;
+
+  function currentKey() { return gameIdx + ':' + ((viewPly < 0) ? (games[gameIdx] ? games[gameIdx].hist.length : 0) : viewPly); }
+  function currentFen() {
+    const g = games[gameIdx];
+    const k = (viewPly < 0) ? (g ? g.hist.length : 0) : viewPly;
+    return g ? g.fens[Math.min(k, g.fens.length - 1)] : new Chess().fen();
+  }
+
+  function setStatus(txt) { $('engine-status').textContent = txt ? '· ' + txt : ''; }
+
+  function ensureEngine() {
+    if (sf) return sfReady;
+    try {
+      sf = new Worker('/js/stockfish.js');
+      sf.onmessage = (e) => onEngMsg(e.data || e);
+      sf.onerror = () => { setStatus('ошибка'); sfReady = false; };
+      sf.postMessage('uci');
+      setStatus('загрузка…');
+      return sfReady;
+    } catch (e) { setStatus('ошибка'); return false; }
+  }
+
+  function onEngMsg(d) {
+    const s = typeof d === 'string' ? d : (d.data || d.line || String(d));
+    if (s.indexOf('uciok') === 0) {
+      sfReady = true;
+      // ВАЖНО: только MultiPV. Смена Threads/Hash в этом билде (2019,
+      // multi-variant) без последующего isready «подвешивает» поиск.
+      sf.postMessage('setoption name MultiPV value ' + ENGINE_LINES);
+      sf.postMessage('isready');
+      setStatus('готов');
+      analyzeNow();
+      return;
+    }
+    if (s.indexOf('readyok') === 0) { setStatus('готов'); }
+    // info depth N ... multipv M ... score cp|mate X ... pv <ходы>
+    const m = s.match(/\bdepth (\d+)\b.*\bmultipv (\d+)\b.*\bscore (cp|mate) (-?\d+)\b.*\bpv (.+)$/);
+    if (m && engBusyKey) {
+      const node = engNodes.get(engBusyKey);
+      if (!node) return;
+      const score = parseInt(m[4], 10);
+      // pv в SAN + FEN-ы по каждому полуходу
+      const scratch = new Chess();
+      try { scratch.load(node.fen); } catch (e) { return; }
+      const uciList = m[5].trim().split(/\s+/);
+      const san = [], fens = [node.fen], pvUci = [];
+      for (const u of uciList) {
+        const mv = { from: u.slice(0, 2), to: u.slice(2, 4) };
+        if (u.length > 4) mv.promotion = u[4];
+        try { const r = scratch.move(mv); san.push(r.san); } catch (e) { break; }
+        pvUci.push(u);
+        fens.push(scratch.fen());
+      }
+      node.lines[+m[2]] = { score, type: m[3], depth: +m[1], turn: node.fen.split(' ')[1] || 'w', san, fens, pvUci };
+      scheduleTreeRender();
+      if (+m[2] === 1) { node.done = false; }
+    }
+    if (s.indexOf('bestmove') === 0 && engBusyKey) {
+      const node = engNodes.get(engBusyKey);
+      if (node) node.done = true;
+      engBusyKey = null;
+      scheduleTreeRender();
+    }
+  }
+
+  function analyzeNow() {
+    if (!engineOn || !sfReady || stopped) return;
+    const key = currentKey();
+    let node = engNodes.get(key);
+    if (!node) {
+      node = { key, fen: currentFen(), ply: +key.split(':')[1], gameIdx, lines: {}, done: false };
+      // не разрастаемся: держим последние 14 позиций
+      if (engNodes.size >= 14) {
+        const first = engNodes.keys().next().value;
+        if (preview && preview.key === first) preview = null;
+        engNodes.delete(first);
+      }
+      engNodes.set(key, node);
+      scheduleTreeRender();
+    } else if (node.done || engBusyKey === key) {
+      return;
+    }
+    if (engBusyKey && engBusyKey !== key) sf.postMessage('stop');
+    engBusyKey = key;
+    node.done = false;
+    sf.postMessage('position fen ' + node.fen);
+    sf.postMessage('go depth ' + ENGINE_DEPTH);
+    setStatus('думаю…');
+  }
+
+  let treeTimer = null;
+  function scheduleTreeRender() {
+    if (treeTimer) { treeDirty = true; return; }
+    renderTree();
+    treeTimer = setTimeout(() => { treeTimer = null; if (treeDirty) { treeDirty = false; scheduleTreeRender(); } }, 150);
+  }
+
+  function fmtScore(line) {
+    if (line.type === 'mate') {
+      return line.score === 0 ? 'M0' : 'M' + Math.abs(line.score);
+    }
+    // perspective движка = сторона, чей ход; переводим в перспективу белых
+    const cp = line.turn === 'w' ? line.score : -line.score;
+    return (cp > 0 ? '+' : '') + (cp / 100).toFixed(1);
+  }
+  function scoreClass(line) {
+    if (line.type === 'mate') return 'm';
+    const cp = line.turn === 'w' ? line.score : -line.score;
+    return cp >= 0 ? 'w' : 'b';
+  }
+
+  function renderTree() {
+    if (!engineOn) { $('analysis-tree').innerHTML = '<div class="eng-hint">Анализ выключен.</div>'; return; }
+    const keys = [...engNodes.keys()].sort((a, b) => (+a.split(':')[1]) - (+b.split(':')[1]));
+    if (!keys.length) { $('analysis-tree').innerHTML = '<div class="eng-hint">Варианты появятся здесь…</div>'; return; }
+
+    let html = '';
+    for (const key of keys) {
+      const node = engNodes.get(key);
+      const isCur = key === currentKey();
+      const num = Math.ceil(node.ply / 2);
+      const title = node.ply === 0 ? 'Начальная позиция'
+        : 'После хода ' + num + (node.ply % 2 ? ' белыми' : ' чёрными')
+        + (games[gameIdx] && games[gameIdx].hist[node.ply - 1] ? ' · ' + esc(games[gameIdx].hist[node.ply - 1].san) : '');
+      html += '<div class="eng-node"><div class="eng-node-title">' + (isCur ? '<span class="cur-dot"></span>' : '') + esc(title) + '</div>';
+      const idxs = Object.keys(node.lines).sort((a, b) => a - b);
+      if (!idxs.length) html += '<div class="eng-hint">считаю…</div>';
+      for (const li of idxs) {
+        const line = node.lines[li];
+        if (!line.san.length) continue;
+        html += '<div class="eng-line"><span class="eng-score ' + scoreClass(line) + '">' + fmtScore(line) + '</span><span class="eng-pv">';
+        for (let j = 0; j < line.san.length; j++) {
+          const mvNum = (node.ply + j) % 2 === 0 ? Math.ceil((node.ply + j + 1) / 2) + '. ' : '';
+          const sel = preview && preview.key === key && preview.lineIdx === +li && preview.moveIdx === j + 1;
+          html += '<span class="pvmove' + (sel ? ' sel' : '') + '" data-key="' + key + '" data-li="' + li + '" data-j="' + j + '">' + mvNum + esc(line.san[j]) + '</span> ';
+        }
+        html += '</span></div>';
+      }
+      html += '</div>';
+    }
+    $('analysis-tree').innerHTML = html;
+    $('analysis-tree').querySelectorAll('.pvmove').forEach(el => {
+      el.addEventListener('click', () => {
+        preview = { key: el.getAttribute('data-key'), lineIdx: +el.getAttribute('data-li'), moveIdx: +el.getAttribute('data-j') + 1 };
+        $('btn-back-game').style.display = '';
+        renderBoard();
+        scheduleTreeRender();
+      });
+    });
+    $('btn-back-game').style.display = preview ? '' : 'none';
+  }
+
+  function toggleEngine() {
+    engineOn = !engineOn;
+    $('btn-engine').classList.toggle('btn-primary', engineOn);
+    $('btn-engine').classList.toggle('btn-ghost', !engineOn);
+    $('analysis-panel').style.display = engineOn ? '' : 'none';
+    if (engineOn) {
+      preview = null;
+      if (ensureEngine()) analyzeNow(); else renderTree();
+    } else {
+      if (sf) { sf.postMessage('stop'); sf.terminate(); sf = null; sfReady = false; }
+      engNodes.clear(); preview = null; engBusyKey = null;
+      setStatus('');
+      renderTree();
+      renderBoard();
+    }
+  }
+
+
   $('btn-flip').addEventListener('click', () => { flipped = !flipped; renderBoard(); renderPlayers(); });
   $('btn-latest').addEventListener('click', () => { follow = true; viewPly = -1; renderAll(); });
+  $('btn-engine').addEventListener('click', toggleEngine);
+  $('btn-back-game').addEventListener('click', () => { preview = null; $('btn-back-game').style.display = 'none'; renderBoard(); scheduleTreeRender(); });
   $('game-select').addEventListener('change', (e) => {
-    gameIdx = +e.target.value; viewPly = -1; follow = true; renderAll();
+    gameIdx = +e.target.value; viewPly = -1; follow = true; preview = null; renderAll();
   });
 
   // стрелки ← → для листания ходов
@@ -550,8 +791,8 @@
     if (!g) return;
     const max = g.hist.length;
     const cur = (viewPly < 0) ? max : viewPly;
-    if (e.key === 'ArrowLeft' && cur > 0) { viewPly = cur - 1; follow = viewPly === max; renderAll(); }
-    if (e.key === 'ArrowRight' && cur < max) { viewPly = cur + 1; follow = viewPly === max; renderAll(); }
+    if (e.key === 'ArrowLeft' && cur > 0) { viewPly = cur - 1; follow = viewPly === max; preview = null; renderAll(); }
+    if (e.key === 'ArrowRight' && cur < max) { viewPly = cur + 1; follow = viewPly === max; preview = null; renderAll(); }
   });
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });

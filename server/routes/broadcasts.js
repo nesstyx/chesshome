@@ -29,32 +29,38 @@ const {
 
 module.exports = function register(app) {
 
-// ── Таблицы (идемпотентно, при старте) ─────────────────────────────
-db(`
-  CREATE TABLE IF NOT EXISTS broadcasts (
-    id           TEXT PRIMARY KEY,
-    name         TEXT NOT NULL,
-    description  TEXT,
-    starts_at    BIGINT NOT NULL DEFAULT 0,
-    round_id     TEXT,
-    source_url   TEXT,
-    created_by   TEXT,
-    created_at   BIGINT NOT NULL,
-    updated_at   BIGINT NOT NULL
-  )
-`).catch(e => console.error('[Broadcasts] create broadcasts:', e.message));
-
-db(`
-  CREATE TABLE IF NOT EXISTS broadcast_pgn (
-    broadcast_id TEXT PRIMARY KEY REFERENCES broadcasts(id) ON DELETE CASCADE,
-    pgn          TEXT NOT NULL,
-    result       TEXT,
-    white        TEXT,
-    black        TEXT,
-    plies        INT NOT NULL DEFAULT 0,
-    updated_at   BIGINT NOT NULL
-  )
-`).catch(e => console.error('[Broadcasts] create broadcast_pgn:', e.message));
+// ── Таблицы (идемпотентно, при старте, СТРОГО последовательно —
+//    broadcast_pgn ссылается на broadcasts через FK) ───────────────
+(async () => {
+  try {
+    await db(`
+      CREATE TABLE IF NOT EXISTS broadcasts (
+        id           TEXT PRIMARY KEY,
+        name         TEXT NOT NULL,
+        description  TEXT,
+        starts_at    BIGINT NOT NULL DEFAULT 0,
+        round_id     TEXT,
+        source_url   TEXT,
+        created_by   TEXT,
+        created_at   BIGINT NOT NULL,
+        updated_at   BIGINT NOT NULL
+      )
+    `);
+    await db(`
+      CREATE TABLE IF NOT EXISTS broadcast_pgn (
+        broadcast_id TEXT PRIMARY KEY REFERENCES broadcasts(id) ON DELETE CASCADE,
+        pgn          TEXT NOT NULL,
+        result       TEXT,
+        white        TEXT,
+        black        TEXT,
+        plies        INT NOT NULL DEFAULT 0,
+        updated_at   BIGINT NOT NULL
+      )
+    `);
+  } catch (e) {
+    console.error('[Broadcasts] create tables:', e.message);
+  }
+})();
 
 // ── Хелперы ────────────────────────────────────────────────────────
 
