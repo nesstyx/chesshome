@@ -64,7 +64,9 @@
   /* доска из /js/board.js задаёт размер инлайном — не даём вылезти
      за пределы нашей колонки (в анализе колонка шире) */
   .board-wrapper { width: 100%; display: block; }
-  #chess-board { max-width: 100% !important; height: auto !important; aspect-ratio: 1 / 1; margin: 0 auto; }
+  #chess-board { max-width: 100% !important; height: auto !important; aspect-ratio: 1 / 1; margin: 0 auto;
+    /* без этого на телефоне касание доски скроллит страницу */
+    touch-action: none; -webkit-tap-highlight-color: transparent; }
 
   .eval-bar-container {
     position: relative; display: flex; flex-direction: column; justify-content: flex-end;
@@ -149,6 +151,19 @@
     font-size: 10.5px; text-transform: uppercase; letter-spacing: 1px;
     color: var(--accent-light); border-top: 1px dashed rgba(201,168,76,.4);
   }
+  /* ветки локального дерева вариантов (отход с любого хода) */
+  #movelist .var-branch {
+    grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 2px 6px; align-items: baseline;
+    padding: 3px 8px 3px 2px; margin-left: 14px;
+    border-left: 2px solid rgba(201,168,76,.35);
+  }
+  #movelist .vb-num { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+  #movelist .vb-move {
+    cursor: pointer; padding: 1px 5px; border-radius: 5px;
+    font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--accent-light);
+    transition: background .1s;
+  }
+  #movelist .vb-move:hover { background: var(--bg-hover); color: var(--text-primary); }
   #btn-latest.pulse { animation: bcPulseGold 1.4s infinite; }
   @keyframes bcPulseGold { 0% { box-shadow: 0 0 0 0 rgba(201,168,76,.5); } 70% { box-shadow: 0 0 0 8px rgba(201,168,76,0); } 100% { box-shadow: 0 0 0 0 rgba(201,168,76,0); } }
 
@@ -380,6 +395,8 @@
   let lastUpdatedAt = null;
   let stopped = false;
   let newLiveMoves = false;   // пока зритель в своём варианте — пришли новые ходы трансляции
+  let varBranches = [];       // сохранённые ветки локального дерева: { start, prefix, moves }
+  let snapHist = null;        // снапшот истории доски — для отлова ветвления
 
   // ── состояние движка (включён по умолчанию — панель видна сразу) ──
   let engineOn = true;
@@ -465,6 +482,42 @@
     return h.length;
   }
 
+  // ── локальное дерево вариантов ──────────────────────────────────
+  // Зритель отходит назад и играет другое продолжение — прежняя линия
+  // сохраняется как ветка и показывается в списке ходов (клик по ходу
+  // ветки — переход на неё). board.js при отходе обрезает историю,
+  // поэтому ловим это снапшотом истории после каждого рендера доски.
+  function sameMv(a, b) {
+    return !!a && !!b && a.from === b.from && a.to === b.to &&
+      (a.promotion || '') === (b.promotion || '');
+  }
+
+  function trackBranches() {
+    if (preview || !boardSynced) { snapHist = null; return; }
+    const h = cb().history || [];
+    if (snapHist) {
+      let d = 0;
+      const n = Math.min(snapHist.length, h.length);
+      while (d < n && sameMv(snapHist[d], h[d])) d++;
+      if (d < snapHist.length) {
+        // с позиции d пошли по-другому — старое продолжение становится веткой
+        const old = snapHist.slice(d);
+        if (old.length) {
+          const ex = varBranches.find(x => x.start === d && x.moves.length && sameMv(x.moves[0], old[0]));
+          if (ex) { ex.moves = old; ex.prefix = snapHist.slice(0, d); }
+          else varBranches.push({
+            start: d,
+            prefix: snapHist.slice(0, d).map(x => ({ from: x.from, to: x.to, promotion: x.promotion || undefined })),
+            moves: old,
+          });
+        }
+      }
+    }
+    snapHist = h.map(m => ({ from: m.from, to: m.to, promotion: m.promotion || undefined, san: m.san }));
+  }
+
+  function resetBranches() { varBranches = []; snapHist = null; }
+
   // базовое время из заголовка TimeControl ('600+2' → 600 сек, '120'/40m' → 7200 сек)
   function tcBaseSec(g) {
     if (!g || !g.headers || !g.headers.TimeControl) return null;
@@ -494,7 +547,46 @@
     if (wasFlipped && !cb().flipped) cb().flipBoard();
     cb().gotoMove(Math.max(0, Math.min(ply, g.hist.length)));
     boardSynced = true;
+    snapHist = null;
     inProgram = false;
+  }
+
+  // Загрузить произвольную линию (префикс трансляции + ветка) в доску
+  function loadLine(mvList, ply) {
+    inProgram = true;
+    const wasFlipped = cb().flipped;
+    uciMoves = mvList.map(mv => ({ from: mv.from, to: mv.to, promotion: mv.promotion || undefined }));
+    cb().loadGameMoves(uciMoves);
+    if (wasFlipped && !cb().flipped) cb().flipBoard();
+    cb().gotoMove(Math.max(0, Math.min(ply, mvList.length)));
+    boardSynced = true;
+    snapHist = null;
+    inProgram = false;
+  }
+
+  // переход на сохранённую ветку (клик по ходу в ветке)
+  function loadBranch(bi, targetPly) {
+    const b = varBranches[bi];
+    if (!b || !b.moves.length) return;
+    // текущая линия со времени отхода — тоже вариант, сохраняем её как ветку
+    const h = cb().history || [];
+    if (h.length > b.start) {
+      const cur = h.slice(b.start);
+      const same = cur.length && b.moves.length && sameMv(cur[0], b.moves[0]);
+      if (!same && cur.length) {
+        const ex = varBranches.find(x => x !== b && x.start === b.start && x.moves.length && sameMv(x.moves[0], cur[0]));
+        if (ex) ex.moves = cur;
+        else varBranches.push({
+          start: b.start,
+          prefix: h.slice(0, b.start).map(x => ({ from: x.from, to: x.to, promotion: x.promotion || undefined })),
+          moves: cur,
+        });
+      }
+    }
+    varBranches.splice(bi, 1);
+    const full = (b.prefix || []).concat(b.moves);
+    loadLine(full, Math.max(b.start + 1, Math.min(targetPly || full.length, full.length)));
+    bcRender();
   }
 
   // follow — следим за последним ходом; меняется только действиями зрителя
@@ -513,6 +605,7 @@
   // игнорируем, чтобы не зациклиться.
   document.addEventListener('board:render', () => {
     if (inProgram) return;
+    trackBranches();
     follow = !preview && curPly() >= histLen();
     bcRender();
   });
@@ -705,7 +798,8 @@
     const h = vm ? (cb().history || []) : null; // локальная история с вариантом
     const vStart = vm && h ? varStartIdx(h, g) : h ? h.length : g.hist.length;
     const src = vm && h && h.length ? h : g.hist;
-    const k = preview ? -1 : (vm && h && h.length ? h.length : curPly());
+    // подсветка текущего хода — в варианте тоже (раньше липла к последнему)
+    const k = preview ? -1 : curPly();
     let html = '';
     for (let i = 0; i < src.length; i += 2) {
       // разделитель «ваш вариант» — перед строкой, где начинается первый ход-вариант
@@ -722,9 +816,26 @@
         ? `<div class="${cls(i + 1)}" data-ply="${ply(i + 1)}">${esc(src[i + 1].san)}</div>`
         : '<div></div>';
     }
+    // ветки локального дерева (отходы с разных ходов) — как в дереве анализа
+    // показываем и когда доска стоит на линии трансляции, если ветки есть
+    if (vm || varBranches.length) {
+      varBranches.forEach((b, bi) => {
+        if (!b.moves.length) return;
+        const num = Math.floor(b.start / 2) + 1;
+        const dots = b.start % 2 === 0 ? '.' : '…';
+        html += `<div class="var-branch"><span class="vb-num">${num}${dots}</span>`;
+        b.moves.forEach((m, j) => {
+          html += `<span class="vb-move" data-b="${bi}" data-ply="${b.start + j + 1}">${esc(m.san)}</span> `;
+        });
+        html += '</div>';
+      });
+    }
     el.innerHTML = html;
     el.querySelectorAll('.mv').forEach(m => m.addEventListener('click', () => {
       cb().gotoMove(+m.getAttribute('data-ply'));
+    }));
+    el.querySelectorAll('.vb-move').forEach(m => m.addEventListener('click', () => {
+      loadBranch(+m.getAttribute('data-b'), +m.getAttribute('data-ply'));
     }));
     const act = el.querySelector('.mv.active');
     if (act) act.scrollIntoView({ block: 'nearest' });
@@ -830,7 +941,7 @@
   }
 
   // ── движок: 2 линии, как в анализе ───────────────────────────────
-  const ENGINE_DEPTH = 10;
+  const ENGINE_DEPTH = 14;
   const ENGINE_LINES = 2;
 
   function currentKey() {
@@ -1030,7 +1141,7 @@
   $('btn-flip').addEventListener('click', () => cb().flipBoard());
   $('btn-latest').addEventListener('click', () => {
     preview = null;
-    if (varMode()) { follow = true; newLiveMoves = false; syncGame(); }
+    if (varMode()) { follow = true; newLiveMoves = false; resetBranches(); syncGame(); }
     else { cb().gotoLast(); }
     bcRender();
   });
@@ -1042,7 +1153,7 @@
     scheduleTreeRender();
   });
   $('game-select').addEventListener('change', (e) => {
-    gameIdx = +e.target.value; preview = null; newLiveMoves = false; follow = true; syncGame(); bcRender();
+    gameIdx = +e.target.value; preview = null; newLiveMoves = false; follow = true; resetBranches(); syncGame(); bcRender();
   });
 
   // стрелки ← → для листания ходов
@@ -1054,7 +1165,7 @@
     else if (e.key === 'ArrowDown') { cb().gotoLast(); e.preventDefault(); }
     else if (e.key === 'Escape') {
       if (preview) { preview = null; syncGame(); bcRender(); scheduleTreeRender(); }
-      else if (varMode()) { follow = true; newLiveMoves = false; syncGame(); bcRender(); }
+      else if (varMode()) { follow = true; newLiveMoves = false; resetBranches(); syncGame(); bcRender(); }
     }
   });
 
