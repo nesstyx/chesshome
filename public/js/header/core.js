@@ -85,6 +85,8 @@
         { id: 'analysis', i18nLabel: 'header.nav_analysis',   icon: '🔍', href: '/analysis', spa: false },
         { id: 'editor',   i18nLabel: 'header.nav_editor', icon: '✏️', href: '/editor' },
         { id: 'ai',       i18nLabel: 'header.nav_ai',      icon: '🤖', href: '/ai', spa: false },
+        { id: 'broadcasts',       i18nLabel: 'header.nav_broadcast',      icon: '📡', href: '/broadcasts', spa: false },
+
       ]
     },
     {

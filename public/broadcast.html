@@ -66,7 +66,10 @@
   .board-wrapper { width: 100%; display: block; }
   #chess-board { max-width: 100% !important; height: auto !important; aspect-ratio: 1 / 1; margin: 0 auto;
     /* без этого на телефоне касание доски скроллит страницу */
-    touch-action: none; -webkit-tap-highlight-color: transparent; }
+    touch-action: none; -webkit-tap-highlight-color: transparent;
+    /* drag фигуры мышью не должен выделять текст и стартовать нативный drag */
+    user-select: none; -webkit-user-select: none; }
+  #chess-board img { -webkit-user-drag: none; }
 
   .eval-bar-container {
     position: relative; display: flex; flex-direction: column; justify-content: flex-end;
@@ -220,9 +223,9 @@
   .eng-score.b { background: rgba(224,85,85,.12); color: var(--red); }
   .eng-score.m { background: rgba(201,168,76,.15); color: var(--accent-light); }
   .eng-pv { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; color: var(--text-secondary); line-height: 1.7; word-spacing: 2px; }
-  .eng-pv .pvmove { cursor: pointer; padding: 1px 3px; border-radius: 4px; color: var(--text-primary); transition: background .1s; }
-  .eng-pv .pvmove:hover { background: var(--bg-hover); color: var(--accent-light); }
-  .eng-pv .pvmove.sel { background: var(--accent-dark); color: #fff; }
+  /* варианты движка — просто текст, некликабельные (клик по ним ломал доску) */
+  .eng-pv .pvmove { color: var(--text-primary); }
+  #btn-eng-stop { flex: none; padding: 6px 10px; }
   #btn-back-game { margin-top: 8px; }
 
   /* ── чат трансляции (слева, пузыри как в анализе) ─────── */
@@ -345,6 +348,7 @@
       <div class="bc-panel bc-analysis" id="analysis-panel">
         <div class="eng-head">
           <button class="eng-toggle on" id="btn-engine">⏸ Движок включён</button>
+          <button class="eng-toggle" id="btn-eng-stop" title="Остановить анализ">⏹</button>
           <span class="eng-status" id="engine-status">Анализирует…</span>
         </div>
         <div class="eng-main">
@@ -404,6 +408,7 @@
   let sfReady = false;
   let engNodes = new Map();     // key 'gameIdx:ply' -> { fen, ply, gameIdx, lines:{}, done }
   let engBusyKey = null;        // что сейчас считает движок
+  let engHold = null;           // позиция, для которой зритель нажал «стоп»
   let treeDirty = false;
 
   // ── утилиты ──────────────────────────────────────────────────────
@@ -609,6 +614,15 @@
     follow = !preview && curPly() >= histLen();
     bcRender();
   });
+
+  // drag фигуры мышью не должен скроллить страницу: подавляем выделение
+  // текста и нативный drag&drop на доске. Pointer-события board.js это не
+  // затрагивает — они идут до mouse-событий и не зависят от них.
+  const bcBoardBox = document.getElementById('game-board-container');
+  if (bcBoardBox) {
+    bcBoardBox.addEventListener('mousedown', (e) => { if (e.button === 0) e.preventDefault(); });
+    bcBoardBox.addEventListener('dragstart', (e) => e.preventDefault());
+  }
 
   // ── eval-бар (как в анализе) ─────────────────────────────────────
   function evalAt(g, k) {
@@ -837,8 +851,15 @@
     el.querySelectorAll('.vb-move').forEach(m => m.addEventListener('click', () => {
       loadBranch(+m.getAttribute('data-b'), +m.getAttribute('data-ply'));
     }));
+    // прокручиваем ТОЛЬКО сам список ходов. scrollIntoView() здесь нельзя:
+    // он крутит всех прокручиваемых предков, включая body, и страница
+    // прыгала при захвате/отпускании фигуры (render() на pointerdown/up)
     const act = el.querySelector('.mv.active');
-    if (act) act.scrollIntoView({ block: 'nearest' });
+    if (act) {
+      const er = el.getBoundingClientRect(), ar = act.getBoundingClientRect();
+      if (ar.top < er.top) el.scrollTop += ar.top - er.top;
+      else if (ar.bottom > er.bottom) el.scrollTop += ar.bottom - er.bottom;
+    }
   }
 
   // ── статус/шапка ─────────────────────────────────────────────────
@@ -941,7 +962,8 @@
   }
 
   // ── движок: 2 линии, как в анализе ───────────────────────────────
-  const ENGINE_DEPTH = 14;
+  const ENGINE_DEPTH = 14;      // стартовая глубина
+  const ENGINE_DEPTH_MAX = 24;  // потолок автопродолжения
   const ENGINE_LINES = 2;
 
   function currentKey() {
@@ -1002,19 +1024,33 @@
         fens.push(scratch.fen());
       }
       node.lines[+m[2]] = { score, type: m[3], depth: +m[1], turn: node.fen.split(' ')[1] || 'w', san, fens, pvUci };
+      node.depth = Math.max(node.depth || 0, +m[1]); // достигнутая глубина
       scheduleTreeRender();
     }
     if (s.indexOf('bestmove') === 0 && engBusyKey) {
       const node = engNodes.get(engBusyKey);
+      const key = engBusyKey;
       if (node) node.done = true;
       engBusyKey = null;
       scheduleTreeRender();
+      // автопродолжение: глубина закончилась — сразу считаем глубже,
+      // пока зритель не нажал «стоп» для этой позиции
+      if (engineOn && node && engHold !== key && key === currentKey() &&
+          (node.depth || 0) < ENGINE_DEPTH_MAX) {
+        node.done = false;
+        engBusyKey = key;
+        sf.postMessage('position fen ' + node.fen);
+        sf.postMessage('go depth ' + Math.min((node.depth || ENGINE_DEPTH) + 2, ENGINE_DEPTH_MAX));
+        setStatus('Анализирует…');
+      }
     }
   }
 
   function analyzeNow() {
     if (!engineOn || !sfReady || stopped) return;
     const key = currentKey();
+    if (engHold === key) return; // зритель остановил анализ этой позиции
+    engHold = null;              // позиция сменилась — «стоп» сбрасывается
     let node = engNodes.get(key);
     if (!node) {
       node = { key, fen: currentFen(), ply: curPly(), gameIdx, lines: {}, done: false };
@@ -1033,7 +1069,8 @@
     engBusyKey = key;
     node.done = false;
     sf.postMessage('position fen ' + node.fen);
-    sf.postMessage('go depth ' + ENGINE_DEPTH);
+    // если позицию уже считали — продолжаем с достигнутой глубины
+    sf.postMessage('go depth ' + Math.min(node.depth || ENGINE_DEPTH, ENGINE_DEPTH_MAX));
     setStatus('Анализирует…');
   }
 
@@ -1087,30 +1124,27 @@
     for (const li of idxs) {
       const line = curNode.lines[li];
       if (!line.san.length) continue;
-      html += '<div class="eng-line"><span class="eng-score ' + scoreClass(line) + '">' + fmtScore(line) + '</span><span class="eng-pv">';
+      // варианты движка — НЕКЛИКАБЕЛЬНЫЙ текст (клик по ним ломал доску)
+      let pvTxt = '';
       for (let j = 0; j < line.san.length; j++) {
         const mvNum = (curNode.ply + j) % 2 === 0 ? Math.ceil((curNode.ply + j + 1) / 2) + '. ' : '';
-        const sel = preview && preview.key === key && preview.lineIdx === +li && preview.moveIdx === j + 1;
-        html += '<span class="pvmove' + (sel ? ' sel' : '') + '" data-key="' + key + '" data-li="' + li + '" data-j="' + j + '">' + mvNum + esc(line.san[j]) + '</span> ';
+        pvTxt += mvNum + line.san[j] + ' ';
       }
-      html += '</span></div>';
+      html += '<div class="eng-line"><span class="eng-score ' + scoreClass(line) + '">' + fmtScore(line) + '</span><span class="eng-pv">' + esc(pvTxt.trim()) + '</span></div>';
     }
     $('analysis-tree').innerHTML = html;
-    $('analysis-tree').querySelectorAll('.pvmove').forEach(el => {
-      el.addEventListener('click', () => {
-        const pKey = el.getAttribute('data-key');
-        const node = engNodes.get(pKey);
-        const line = node && node.lines[+el.getAttribute('data-li')];
-        const j = +el.getAttribute('data-j') + 1;
-        if (!line || !line.fens[j]) return;
-        preview = { key: pKey, lineIdx: +el.getAttribute('data-li'), moveIdx: j, restorePly: curPly() };
-        inProgram = true;
-        try { cb().loadFEN(line.fens[j]); } catch (e) { preview = null; }
-        inProgram = false;
-        renderMoves(); renderMeta(); scheduleTreeRender();
-      });
-    });
+    if (engHold === key && curNode.done) setStatus('Остановлено');
+    updateStopBtn();
     $('btn-back-game').style.display = preview ? '' : 'none';
+  }
+
+  // кнопка «стоп»: останавливает автопродолжение для текущей позиции,
+  // повторное нажатие (▶) — продолжает анализ
+  function updateStopBtn() {
+    const btn = $('btn-eng-stop');
+    const hold = engHold !== null && engHold === currentKey();
+    btn.textContent = hold ? '▶' : '⏹';
+    btn.title = hold ? 'Продолжить анализ' : 'Остановить анализ';
   }
 
   function toggleEngine() {
@@ -1118,12 +1152,13 @@
     const btn = $('btn-engine');
     btn.classList.toggle('on', engineOn);
     btn.textContent = engineOn ? '⏸ Движок включён' : '▶ Движок выключен';
+    $('btn-eng-stop').style.display = engineOn ? '' : 'none';
     // панель движка ВСЕГДА видна — тумблером включается только анализ
     if (engineOn) {
       if (ensureEngine()) analyzeNow(); else renderTree();
     } else {
       if (sf) { sf.postMessage('stop'); sf.terminate(); sf = null; sfReady = false; }
-      engNodes.clear(); preview = null; engBusyKey = null;
+      engNodes.clear(); preview = null; engBusyKey = null; engHold = null;
       setStatus('');
       $('engine-status').classList.remove('thinking');
       renderTree();
@@ -1146,6 +1181,22 @@
     bcRender();
   });
   $('btn-engine').addEventListener('click', toggleEngine);
+  $('btn-eng-stop').addEventListener('click', () => {
+    const key = currentKey();
+    if (engHold === key) {
+      // было «стоп» — продолжаем анализ
+      engHold = null;
+      analyzeNow();
+    } else {
+      engHold = key;
+      if (sf && engBusyKey) sf.postMessage('stop');
+      const node = engNodes.get(key);
+      if (node) node.done = true;
+      setStatus('Остановлено');
+      $('engine-status').classList.remove('thinking');
+    }
+    updateStopBtn();
+  });
   $('btn-back-game').addEventListener('click', () => {
     preview = null;
     syncGame();
