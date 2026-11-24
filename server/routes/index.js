@@ -70,6 +70,7 @@ require('./pages-late')(app);         // HTML-страницы (вторая г�
 require('./stats')(app);              // статистика
 require('./dev-diary')(app);          // дневник разработки
 require('./game-page')(app);          // страница партии /game/:gameId
+require('./broadcasts')(app);         // трансляции /broadcasts (lichess)
 
 // Финальные fallback-маршруты (обязаны быть последними)
 

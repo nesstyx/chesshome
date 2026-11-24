@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<script src="/js/api.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Трансляции — Chess Home</title>
+  <meta name="description" content="Трансляции шахматных соревнований в реальном времени">
+  <link rel="stylesheet" href="/css/main.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📡</text></svg>">
+<style>
+  body { background: var(--bg-primary); color: var(--text-primary); font-family: inherit; margin: 0; }
+
+  .bc-wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 60px; padding-top: calc(var(--header-h, 60px) + 24px); }
+
+  .bc-title { font-size: 26px; font-weight: 700; margin: 8px 0 4px; }
+  .bc-sub { color: var(--text-secondary); font-size: 14px; margin-bottom: 20px; }
+
+  /* карточка трансляции */
+  .bc-card {
+    display: flex; align-items: center; gap: 14px;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 16px; margin-bottom: 10px;
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .bc-card:hover { border-color: var(--accent-dark); background: var(--bg-hover); }
+
+  .bc-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--text-muted); }
+  .bc-dot.live { background: var(--red); animation: bcPulse 1.4s infinite; }
+  .bc-dot.upcoming { background: var(--accent); }
+  .bc-dot.finished { background: var(--text-muted); }
+  @keyframes bcPulse { 0% { box-shadow: 0 0 0 0 rgba(224,85,85,.5); } 70% { box-shadow: 0 0 0 8px rgba(224,85,85,0); } 100% { box-shadow: 0 0 0 0 rgba(224,85,85,0); } }
+
+  .bc-main { flex: 1; min-width: 0; }
+  .bc-name { font-weight: 600; font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bc-players { color: var(--text-secondary); font-size: 13px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bc-time { color: var(--text-secondary); font-size: 13px; text-align: right; flex: none; line-height: 1.5; }
+  .bc-live-badge {
+    color: var(--red); font-weight: 700; font-size: 12px; letter-spacing: .5px; text-transform: uppercase;
+  }
+  .bc-result-badge { color: var(--green); font-weight: 700; font-size: 12px; }
+  .bc-del {
+    flex: none; background: none; border: 1px solid var(--border); color: var(--text-secondary);
+    border-radius: 8px; width: 30px; height: 30px; cursor: pointer; font-size: 15px; line-height: 1;
+  }
+  .bc-del:hover { border-color: var(--red); color: var(--red); }
+
+  .bc-empty { text-align: center; color: var(--text-secondary); padding: 50px 0; font-size: 15px; }
+
+  /* админ-форма */
+  .bc-admin { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; margin-bottom: 22px; }
+  .bc-admin h3 { margin: 0 0 12px; font-size: 15px; color: var(--accent); }
+  .bc-admin label { display: block; font-size: 12px; color: var(--text-secondary); margin: 10px 0 4px; }
+  .bc-admin input, .bc-admin textarea {
+    width: 100%; box-sizing: border-box; background: var(--bg-secondary); border: 1px solid var(--border);
+    color: var(--text-primary); border-radius: 8px; padding: 9px 12px; font-size: 14px;
+  }
+  .bc-admin input:focus, .bc-admin textarea:focus { outline: none; border-color: var(--accent-dark); }
+  .bc-admin-row { display: flex; gap: 12px; }
+  .bc-admin-row > div { flex: 1; }
+  @media (max-width: 600px) { .bc-admin-row { flex-direction: column; gap: 0; } }
+  .bc-admin .btn { margin-top: 14px; }
+  .bc-err { color: var(--red); font-size: 13px; margin-top: 8px; min-height: 16px; }
+</style>
+</head>
+<body>
+
+<header id="header">
+  <a href="/" class="logo"><span class="logo-icon">♚</span> Chess Home</a>
+  <nav>
+    <ul class="nav-links">
+      <li><a href="/lobby">🏆 Играть</a></li>
+      <li><a href="/tv">📺 TV</a></li>
+      <li><a href="/broadcasts" class="active">📡 Трансляции</a></li>
+      <li><a href="/analysis">🔍 Анализ</a></li>
+    </ul>
+  </nav>
+  <div class="header-right" id="header-right"></div>
+</header>
+
+<div class="bc-wrap">
+  <div class="bc-title">📡 Трансляции</div>
+  <div class="bc-sub">Соревнования в реальном времени. Партия обновляется автоматически.</div>
+
+  <!-- Админ: добавление трансляции -->
+  <div class="bc-admin" id="bc-admin" style="display:none">
+    <h3>+ Добавить трансляцию</h3>
+    <div class="bc-admin-row">
+      <div>
+        <label>Название *</label>
+        <input id="f-name" maxlength="120" placeholder="FIDE World Chess Championship 2026 — Game 1">
+      </div>
+      <div>
+        <label>Дата и время начала *</label>
+        <input id="f-starts" type="datetime-local">
+      </div>
+    </div>
+    <label>Ссылка на трансляцию Lichess (раунд)</label>
+    <input id="f-url" placeholder="https://lichess.org/broadcast/fide-world-chess-championship-2026/game-1/xLgOJ6cb">
+    <label>Описание</label>
+    <input id="f-desc" maxlength="500" placeholder="GM Gukesh D — GM Sindarov, Javokhir. Матч на звание чемпиона мира.">
+    <button class="btn btn-primary" id="f-save">Создать</button>
+    <div class="bc-err" id="f-err"></div>
+  </div>
+
+  <div id="bc-list"><div class="bc-empty">Загрузка…</div></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  let me = null;
+  const STATUS_TEXT = {
+    live: '<span class="bc-live-badge">● Live</span>',
+    upcoming: '<span style="color:var(--accent);font-weight:600">Скоро</span>',
+    paused: '<span style="color:var(--text-muted);font-weight:600">Пауза</span>',
+    pending: '<span style="color:var(--text-muted);font-weight:600">Ожидание</span>',
+    finished: '<span class="bc-result-badge">Завершён</span>',
+  };
+
+  function fmtTime(ms) {
+    if (!ms) return '—';
+    return new Date(ms).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  async function loadMe() {
+    try {
+      me = await apiGet('/me');
+      if (me && me.role === 'admin') document.getElementById('bc-admin').style.display = '';
+    } catch (e) { /* не залогинен — форму не показываем */ }
+  }
+
+  async function load() {
+    let list;
+    try { list = await apiGet('/broadcasts'); }
+    catch (e) { document.getElementById('bc-list').innerHTML = '<div class="bc-empty">Не удалось загрузить список</div>'; return; }
+
+    const c = document.getElementById('bc-list');
+    if (!list.length) { c.innerHTML = '<div class="bc-empty">Пока нет ни одной трансляции</div>'; return; }
+
+    c.innerHTML = list.map(b => {
+      const del = (me && me.role === 'admin')
+        ? `<button class="bc-del" data-del="${b.id}" title="Удалить">✕</button>` : '';
+      const resultLine = (b.status === 'finished' && b.result)
+        ? ` · ${esc(b.result)}` : '';
+      return `
+      <div class="bc-card" data-open="${b.id}">
+        <div class="bc-dot ${b.status}"></div>
+        <div class="bc-main">
+          <div class="bc-name">${esc(b.name)}</div>
+          <div class="bc-players">${(b.white || b.black) ? esc(b.white) + ' — ' + esc(b.black) : (b.description ? esc(b.description) : '&nbsp;')}${b.plies ? ' · ходов: ' + b.plies : ''}</div>
+        </div>
+        <div class="bc-time">
+          ${STATUS_TEXT[b.status] || ''}${resultLine}<br>
+          ${fmtTime(b.startsAt)}
+        </div>
+        ${del}
+      </div>`;
+    }).join('');
+
+    c.querySelectorAll('[data-open]').forEach(el => {
+      el.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-del]')) return;
+        location.href = '/broadcasts/' + el.getAttribute('data-open');
+      });
+    });
+    c.querySelectorAll('[data-del]').forEach(el => {
+      el.addEventListener('click', async () => {
+        if (!confirm('Удалить трансляцию?')) return;
+        try { await apiPost('/broadcasts/' + el.getAttribute('data-del') + '/delete', {}); load(); }
+        catch (e) { alert(e.message); }
+      });
+    });
+  }
+
+  async function create() {
+    const err = document.getElementById('f-err');
+    err.textContent = '';
+    const name = document.getElementById('f-name').value.trim();
+    const startsRaw = document.getElementById('f-starts').value;
+    const url = document.getElementById('f-url').value.trim();
+    const desc = document.getElementById('f-desc').value.trim();
+    if (!name) { err.textContent = 'Укажите название'; return; }
+    if (!startsRaw) { err.textContent = 'Укажите дату и время'; return; }
+    const startsAt = new Date(startsRaw).getTime();
+    try {
+      await apiPost('/broadcasts', { name, startsAt, sourceUrl: url || undefined, description: desc || undefined });
+      document.getElementById('f-name').value = '';
+      document.getElementById('f-url').value = '';
+      document.getElementById('f-desc').value = '';
+      load();
+    } catch (e) { err.textContent = e.message; }
+  }
+
+  document.getElementById('f-save').addEventListener('click', create);
+
+  loadMe();
+  load();
+  setInterval(() => { if (!document.hidden) load(); }, 10000);
+})();
+</script>
+
+</body>
+</html>
