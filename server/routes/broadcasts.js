@@ -6,13 +6,19 @@
 // (POST /api/broadcasts/push с ключом BROADCAST_PUSH_KEY в заголовке
 // x-broadcast-key — по образцу durka.js).
 //
-// Страницы:  /broadcasts        — список трансляций (+ форма добавления для админов)
+// Страницы:  /broadcasts        — список ТУРНИРОВ (+ форма добавления для админов)
+//            /broadcasts/t/:id  — страница турнира (список его партий)
 //            /broadcasts/:id    — партия на весь экран
-// API:       GET  /api/broadcasts          — список (без PGN)
+// API:       GET  /api/broadcasts          — список (без PGN), ?tournament=<id> — фильтр
 //            GET  /api/broadcasts/:id      — детали + свежий PGN (поллинг фронтенда)
-//            POST /api/broadcasts          — создать трансляцию (только admin)
+//            POST /api/broadcasts          — создать трансляцию (только admin), можно с tournamentId
 //            POST /api/broadcasts/:id/delete — удалить трансляцию (только admin)
+//            POST /api/broadcasts/:id/set-tournament — привязать/отвязать партию к турниру (только admin)
 //            POST /api/broadcasts/push     — приём PGN от скрипта на ПК (по ключу)
+// Турниры (группы партий):
+//            GET  /api/broadcast-tournaments          — список турниров со сводным статусом
+//            POST /api/broadcast-tournaments          — создать турнир (только admin)
+//            POST /api/broadcast-tournaments/:id/delete — удалить турнир ВМЕСТЕ с его партиями (только admin)
 // Чат трансляции:
 //            GET  /api/broadcasts/:id/chat          — последние сообщения (?after=ts — инкрементально)
 //            POST /api/broadcasts/:id/chat          — написать (только авторизованные)
@@ -37,18 +43,38 @@ module.exports = function register(app) {
 //    broadcast_pgn ссылается на broadcasts через FK) ───────────────
 (async () => {
   try {
+    // Турниры — группы партий. Удаляется турнир → каскадом удаляются его
+    // партии (FK ниже), а вместе с партиями — их PGN и чат (CASCADE там).
     await db(`
-      CREATE TABLE IF NOT EXISTS broadcasts (
+      CREATE TABLE IF NOT EXISTS broadcast_tournaments (
         id           TEXT PRIMARY KEY,
         name         TEXT NOT NULL,
         description  TEXT,
         starts_at    BIGINT NOT NULL DEFAULT 0,
-        round_id     TEXT,
-        source_url   TEXT,
         created_by   TEXT,
         created_at   BIGINT NOT NULL,
         updated_at   BIGINT NOT NULL
       )
+    `);
+    await db(`
+      CREATE TABLE IF NOT EXISTS broadcasts (
+        id            TEXT PRIMARY KEY,
+        name          TEXT NOT NULL,
+        description   TEXT,
+        starts_at     BIGINT NOT NULL DEFAULT 0,
+        round_id      TEXT,
+        source_url    TEXT,
+        tournament_id TEXT REFERENCES broadcast_tournaments(id) ON DELETE CASCADE,
+        created_by    TEXT,
+        created_at    BIGINT NOT NULL,
+        updated_at    BIGINT NOT NULL
+      )
+    `);
+    // Для БД, созданных до появления турниров: добавляем колонку (идемпотентно).
+    await db(`
+      ALTER TABLE broadcasts
+      ADD COLUMN IF NOT EXISTS tournament_id
+      TEXT REFERENCES broadcast_tournaments(id) ON DELETE CASCADE
     `);
     await db(`
       CREATE TABLE IF NOT EXISTS broadcast_pgn (
@@ -125,6 +151,8 @@ function rowToBroadcast(row, withPgn) {
     startsAt: Number(row.starts_at) || 0,
     roundId: row.round_id || null,
     sourceUrl: row.source_url || null,
+    tournamentId: row.tournament_id || null,
+    tournamentName: row.t_name || null,
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
     status: broadcastStatus(row),
@@ -140,22 +168,161 @@ function rowToBroadcast(row, withPgn) {
 
 const LIST_SQL = `
   SELECT b.id, b.name, b.description, b.starts_at, b.round_id, b.source_url,
+         b.tournament_id, t.name AS t_name,
          b.created_at, b.updated_at,
          p.pgn, p.result, p.white, p.black, p.plies, p.updated_at AS pgn_updated_at
   FROM broadcasts b
+  LEFT JOIN broadcast_tournaments t ON t.id = b.tournament_id
   LEFT JOIN broadcast_pgn p ON p.broadcast_id = b.id
 `;
+
+// ── API: список ТУРНИРОВ со сводным статусом ───────────────────────
+// Статус турнира выводится из статусов его партий:
+// live > paused > finished/unfinished миксы и т.д. (см. ниже).
+function tournamentStatus(games, startsAt) {
+  if (!games.length) return (startsAt > Date.now()) ? 'upcoming' : 'pending';
+  if (games.some(g => g.status === 'live')) return 'live';
+  if (games.every(g => g.status === 'finished')) return 'finished';
+  if (games.some(g => g.status === 'paused')) return 'paused';
+  if (games.some(g => g.status === 'upcoming')) return 'upcoming';
+  return 'pending';
+}
+
+app.get('/api/broadcast-tournaments', async (req, res) => {
+  try {
+    const r = await db(`
+      SELECT t.id, t.name, t.description, t.starts_at, t.created_at, t.updated_at,
+             b.id AS b_id, b.starts_at AS b_starts_at, b.created_at AS b_created_at,
+             p.result, p.white, p.black, p.updated_at AS pgn_updated_at
+      FROM broadcast_tournaments t
+      LEFT JOIN broadcasts b ON b.tournament_id = t.id
+      LEFT JOIN broadcast_pgn p ON p.broadcast_id = b.id
+      ORDER BY t.starts_at DESC, t.created_at DESC, b.starts_at ASC
+    `);
+    const map = new Map();
+    for (const row of r.rows) {
+      let t = map.get(row.id);
+      if (!t) {
+        t = {
+          id: row.id, name: row.name, description: row.description || '',
+          startsAt: Number(row.starts_at) || 0,
+          createdAt: Number(row.created_at), updatedAt: Number(row.updated_at),
+          games: [],
+        };
+        map.set(row.id, t);
+      }
+      if (row.b_id) {
+        t.games.push({
+          status: broadcastStatus({
+            pgn_updated_at: row.pgn_updated_at,
+            starts_at: row.b_starts_at,
+            result: row.result,
+          }),
+          white: row.white || null,
+          black: row.black || null,
+          result: row.result || null,
+          pgnUpdatedAt: row.pgn_updated_at ? Number(row.pgn_updated_at) : null,
+        });
+      }
+    }
+    const out = [...map.values()].map(t => {
+      const g = t.games;
+      const withPlayers = g
+        .filter(x => x.white || x.black)
+        .sort((a, b) => (b.pgnUpdatedAt || 0) - (a.pgnUpdatedAt || 0))[0] || null;
+      const lastMoveAt = g.reduce((acc, x) => Math.max(acc || 0, x.pgnUpdatedAt || 0), 0) || null;
+      return {
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        startsAt: t.startsAt,
+        createdAt: t.createdAt,
+        updatedAt: t.updatedAt,
+        status: tournamentStatus(g, t.startsAt),
+        gamesCount: g.length,
+        liveCount: g.filter(x => x.status === 'live' || x.status === 'paused').length,
+        finishedCount: g.filter(x => x.status === 'finished').length,
+        players: withPlayers ? { white: withPlayers.white, black: withPlayers.black } : null,
+        lastMoveAt,
+      };
+    });
+    res.json(out);
+  } catch (e) {
+    console.error('[Broadcasts] tournaments list:', e.message);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// ── API: создать турнир (только админ) ─────────────────────────────
+app.post('/api/broadcast-tournaments', authMiddleware, async (req, res) => {
+  await requireAdmin(req, res, async () => {
+    try {
+      const { name, startsAt, description } = req.body || {};
+
+      const nameClean = String(name || '').trim();
+      if (!nameClean || nameClean.length > 120) {
+        return res.status(400).json({ error: 'Название обязательно (до 120 символов)' });
+      }
+
+      let starts = Number(startsAt);
+      if (!Number.isFinite(starts) || starts < 0) {
+        const parsed = Date.parse(String(startsAt || ''));
+        if (Number.isNaN(parsed)) return res.status(400).json({ error: 'Некорректное время начала' });
+        starts = parsed;
+      }
+
+      const descClean = description ? String(description).trim().substring(0, 500) : null;
+      const id = uuidv4();
+      const now = Date.now();
+      await db(`
+        INSERT INTO broadcast_tournaments (id, name, description, starts_at, created_by, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $6)`,
+        [id, nameClean, descClean, Math.round(starts), req.user.username || 'admin', now]);
+
+      console.log(`[Broadcasts] Создан турнир "${nameClean}" (${id}) админом ${req.user.username}`);
+      res.json({ ok: true, id });
+    } catch (e) {
+      console.error('[Broadcasts] tournament create:', e.message);
+      res.status(500).json({ error: 'Ошибка сервера' });
+    }
+  });
+});
+
+// ── API: удалить турнир ВМЕСТЕ со всеми его партиями (только админ).
+// Каскад: broadcast_tournaments → broadcasts → broadcast_pgn/broadcast_chat.
+app.post('/api/broadcast-tournaments/:id/delete', authMiddleware, async (req, res) => {
+  await requireAdmin(req, res, async () => {
+    try {
+      const r = await db(
+        `DELETE FROM broadcast_tournaments WHERE id = $1 RETURNING id`,
+        [String(req.params.id)]);
+      if (!r.rows.length) return res.status(404).json({ error: 'Турнир не найден' });
+      res.json({ ok: true });
+    } catch (e) {
+      console.error('[Broadcasts] tournament delete:', e.message);
+      res.status(500).json({ error: 'Ошибка сервера' });
+    }
+  });
+});
 
 // ── HTML-страницы ──────────────────────────────────────────────────
 app.get('/broadcasts', (req, res) =>
   sendVersionedHtml(res, path.join(__dirname, '../../public/broadcasts.html')));
 
+// Страница турнира. Регистрируется ДО /broadcasts/:id, чтобы «t» не
+// съелось как id партии.
+app.get('/broadcasts/t/:id', (req, res) =>
+  sendVersionedHtml(res, path.join(__dirname, '../../public/broadcast-tournament.html')));
+
 app.get('/broadcasts/:id', (req, res) =>
   sendVersionedHtml(res, path.join(__dirname, '../../public/broadcast.html')));
 
-// ── API: список трансляций ─────────────────────────────────────────
+// ── API: список трансляций (?tournament=<id> — только партии турнира) ──
 app.get('/api/broadcasts', async (req, res) => {
-  const r = await db(`${LIST_SQL} ORDER BY b.starts_at DESC, b.created_at DESC LIMIT 200`);
+  const tId = String(req.query.tournament || '');
+  const r = tId
+    ? await db(`${LIST_SQL} WHERE b.tournament_id = $1 ORDER BY b.starts_at ASC, b.created_at ASC LIMIT 200`, [tId])
+    : await db(`${LIST_SQL} ORDER BY b.starts_at DESC, b.created_at DESC LIMIT 200`);
   res.json(r.rows.map(row => rowToBroadcast(row, false)));
 });
 
@@ -218,7 +385,7 @@ app.get('/api/broadcasts/:id', async (req, res) => {
 // ── API: создать трансляцию (только админ) ─────────────────────────
 app.post('/api/broadcasts', authMiddleware, async (req, res) => {
   await requireAdmin(req, res, async () => {
-    const { name, startsAt, roundId, sourceUrl, description } = req.body || {};
+    const { name, startsAt, roundId, sourceUrl, description, tournamentId } = req.body || {};
 
     const nameClean = String(name || '').trim();
     if (!nameClean || nameClean.length > 120) {
@@ -238,12 +405,20 @@ app.post('/api/broadcasts', authMiddleware, async (req, res) => {
     const urlClean = sourceUrl ? String(sourceUrl).trim().substring(0, 300) : null;
     const descClean = description ? String(description).trim().substring(0, 500) : null;
 
+    // необязательная привязка к турниру
+    let tourClean = null;
+    if (tournamentId) {
+      const t = await db(`SELECT id FROM broadcast_tournaments WHERE id = $1`, [String(tournamentId)]);
+      if (!t.rows.length) return res.status(400).json({ error: 'Турнир не найден' });
+      tourClean = String(tournamentId);
+    }
+
     const id = uuidv4();
     const now = Date.now();
     await db(`
-      INSERT INTO broadcasts (id, name, description, starts_at, round_id, source_url, created_by, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)`,
-      [id, nameClean, descClean, Math.round(starts), roundClean, urlClean, req.user.username || 'admin', now]);
+      INSERT INTO broadcasts (id, name, description, starts_at, round_id, source_url, tournament_id, created_by, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
+      [id, nameClean, descClean, Math.round(starts), roundClean, urlClean, tourClean, req.user.username || 'admin', now]);
 
     console.log(`[Broadcasts] Создана трансляция "${nameClean}" (${id}) админом ${req.user.username}`);
     res.json({ ok: true, id });
@@ -325,6 +500,33 @@ app.post('/api/broadcasts/:id/chat/:mid/delete', authMiddleware, async (req, res
     console.error('[Broadcasts] chat delete:', e.message);
     res.status(500).json({ error: 'Ошибка сервера' });
   }
+});
+
+// ── API: привязать партию к турниру / отвязать (только админ).
+// body: { tournamentId: '<id>' } — привязать (можно и с другого турнира —
+// просто перенесёт), { tournamentId: null } — отвязать («без турнира»).
+app.post('/api/broadcasts/:id/set-tournament', authMiddleware, async (req, res) => {
+  await requireAdmin(req, res, async () => {
+    try {
+      const b = await db(`SELECT id FROM broadcasts WHERE id = $1`, [String(req.params.id)]);
+      if (!b.rows.length) return res.status(404).json({ error: 'Трансляция не найдена' });
+
+      const { tournamentId } = req.body || {};
+      if (tournamentId == null || tournamentId === '') {
+        await db(`UPDATE broadcasts SET tournament_id = NULL, updated_at = $1 WHERE id = $2`,
+          [Date.now(), String(req.params.id)]);
+        return res.json({ ok: true, tournamentId: null });
+      }
+      const t = await db(`SELECT id FROM broadcast_tournaments WHERE id = $1`, [String(tournamentId)]);
+      if (!t.rows.length) return res.status(400).json({ error: 'Турнир не найден' });
+      await db(`UPDATE broadcasts SET tournament_id = $1, updated_at = $2 WHERE id = $3`,
+        [String(tournamentId), Date.now(), String(req.params.id)]);
+      res.json({ ok: true, tournamentId: String(tournamentId) });
+    } catch (e) {
+      console.error('[Broadcasts] set-tournament:', e.message);
+      res.status(500).json({ error: 'Ошибка сервера' });
+    }
+  });
 });
 
 // ── API: удалить трансляцию (только админ). DELETE-метод режется

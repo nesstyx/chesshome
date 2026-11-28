@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<script src="/js/utils.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/toast.js"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Турнир — Chess Home</title>
+  <meta name="description" content="Турнир — список партий трансляции в реальном времени — Chess Home">
+  <link rel="stylesheet" href="/css/main.css">
+  <script src="/js/header/core.js"></script>
+  <script src="/js/header/styles.js"></script>
+  <script src="/js/header/render.js"></script>
+  <script src="/js/header/right.js"></script>
+  <script src="/js/header/api.js"></script>
+  <link rel="icon" type="image/png" href="/img/logo/favicon.png">
+<style>
+  body { background: var(--bg-primary); color: var(--text-primary); font-family: var(--font-body); }
+
+  .bc-page { max-width: 920px; margin: 0 auto; padding: 24px 20px 60px; }
+
+  .bc-topline { display: flex; align-items: center; margin-bottom: 10px; }
+  .bc-back {
+    color: var(--text-secondary); text-decoration: none; font-size: 13px; font-weight: 600;
+    padding: 5px 12px 5px 8px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg-card); transition: all .15s;
+  }
+  .bc-back:hover { color: var(--accent); border-color: var(--accent-dark); }
+
+  /* ── HERO / шапка турнира ─────────────────────────────── */
+  .bc-hero { text-align: center; padding: 16px 0 26px; position: relative; }
+  .bc-hero::before {
+    content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+    width: min(420px, 100%); height: 180px;
+    background: radial-gradient(ellipse, rgba(201,168,76,0.13) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .bc-hero-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 52px; height: 52px; border-radius: 14px;
+    background: rgba(201,168,76,0.12); border: 1px solid rgba(201,168,76,0.28);
+    font-size: 26px; margin-bottom: 12px;
+  }
+  .bc-hero h1 {
+    font-family: var(--font-display); font-size: 32px; font-weight: 700;
+    margin: 0 0 8px; letter-spacing: -0.5px; color: var(--text-primary);
+  }
+  .bc-hero p { color: var(--text-secondary); font-size: 14px; margin: 0; }
+
+  /* ── CARD партий ──────────────────────────────────────── */
+  .bc-card {
+    display: flex; align-items: stretch; gap: 0;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); margin-bottom: 12px; overflow: hidden;
+    cursor: pointer; transition: transform .18s, border-color .18s, box-shadow .18s;
+    position: relative;
+  }
+  .bc-card:hover { transform: translateY(-2px); border-color: var(--accent-dark); box-shadow: 0 8px 24px rgba(0,0,0,.35), 0 0 0 1px rgba(201,168,76,.08); }
+
+  .bc-stripe { width: 4px; flex: none; background: var(--border); }
+  .bc-stripe.live { background: var(--red); }
+  .bc-stripe.upcoming { background: var(--accent); }
+  .bc-stripe.paused, .bc-stripe.pending { background: var(--text-muted); }
+  .bc-stripe.finished { background: var(--green); }
+
+  .bc-inner { flex: 1; min-width: 0; padding: 16px 18px; display: flex; align-items: center; gap: 14px; }
+
+  .bc-status-pill {
+    flex: none; display: inline-flex; align-items: center; gap: 7px;
+    font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase;
+    padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border);
+    color: var(--text-secondary); background: var(--bg-secondary);
+    min-width: 86px; justify-content: center;
+  }
+  .bc-status-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); flex: none; }
+  .bc-status-pill.live { color: var(--red); border-color: rgba(224,85,85,.45); background: rgba(224,85,85,.08); }
+  .bc-status-pill.live .dot { background: var(--red); animation: bcPulse 1.4s infinite; }
+  .bc-status-pill.upcoming { color: var(--accent-light); border-color: rgba(201,168,76,.45); background: rgba(201,168,76,.08); }
+  .bc-status-pill.upcoming .dot { background: var(--accent); }
+  .bc-status-pill.finished { color: var(--green); border-color: rgba(76,175,114,.4); background: rgba(76,175,114,.08); }
+  .bc-status-pill.finished .dot { background: var(--green); }
+  @keyframes bcPulse { 0% { box-shadow: 0 0 0 0 rgba(224,85,85,.55); } 70% { box-shadow: 0 0 0 7px rgba(224,85,85,0); } 100% { box-shadow: 0 0 0 0 rgba(224,85,85,0); } }
+
+  .bc-main { flex: 1; min-width: 0; }
+  .bc-name {
+    font-family: var(--font-display); font-size: 19px; font-weight: 600; color: var(--text-primary);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;
+  }
+  .bc-players {
+    color: var(--text-secondary); font-size: 13.5px; margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .bc-players b { color: var(--text-primary); font-weight: 600; }
+  .bc-meta { color: var(--text-muted); font-size: 12px; margin-top: 5px; }
+
+  .bc-right { flex: none; text-align: right; line-height: 1.6; }
+  .bc-result { color: var(--green); font-weight: 700; font-size: 12.5px; font-family: 'JetBrains Mono', monospace; }
+
+  .bc-del {
+    flex: none; align-self: center; margin-right: 14px;
+    background: none; border: 1px solid var(--border); color: var(--text-secondary);
+    border-radius: 8px; width: 32px; height: 32px; cursor: pointer; font-size: 14px; line-height: 1;
+    transition: all .15s;
+  }
+  .bc-del:hover { border-color: var(--red); color: var(--red); background: rgba(224,85,85,.08); }
+
+  .bc-empty {
+    text-align: center; padding: 70px 20px; color: var(--text-secondary); font-size: 15px;
+    border: 1px dashed var(--border-light); border-radius: var(--radius); background: rgba(30,32,40,.4);
+  }
+  .bc-empty .big { font-size: 42px; margin-bottom: 12px; }
+
+  /* ── ADMIN ────────────────────────────────────────────── */
+  .bc-admin {
+    background: linear-gradient(180deg, rgba(201,168,76,.05) 0%, transparent 40%), var(--bg-card);
+    border: 1px solid var(--border-light); border-radius: 14px;
+    padding: 20px 22px; margin-bottom: 26px;
+  }
+  .bc-admin h3 {
+    margin: 0 0 16px; font-size: 14px; color: var(--accent);
+    text-transform: uppercase; letter-spacing: 1px; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .bc-admin h3::before { content: ''; width: 20px; height: 2px; background: var(--accent); border-radius: 2px; }
+  .bc-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .bc-grid .full { grid-column: 1 / -1; }
+  .bc-admin label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 5px; font-weight: 600; }
+  .bc-admin input, .bc-admin select {
+    width: 100%; box-sizing: border-box; background: var(--bg-secondary); border: 1px solid var(--border);
+    color: var(--text-primary); border-radius: 8px; padding: 10px 12px; font-size: 14px;
+    font-family: var(--font-body); transition: border-color .15s;
+  }
+  .bc-admin input:focus, .bc-admin select:focus { outline: none; border-color: var(--accent-dark); box-shadow: 0 0 0 3px rgba(201,168,76,.1); }
+  .bc-admin .btn { margin-top: 16px; }
+  .bc-err { color: var(--red); font-size: 13px; margin-top: 10px; min-height: 16px; }
+  .bc-admin + .bc-admin { margin-top: -6px; }
+  .bc-move-row { display: flex; gap: 10px; align-items: stretch; }
+  .bc-move-row select { flex: 1; min-width: 0; }
+  .bc-move-row .btn { margin-top: 0; flex: none; }
+
+  @media (max-width: 640px) {
+    .bc-hero h1 { font-size: 24px; }
+    .bc-grid { grid-template-columns: 1fr; }
+    .bc-inner { flex-wrap: wrap; }
+    .bc-status-pill { order: -1; }
+    .bc-move-row { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+
+<!-- header injected by /js/header.js -->
+
+<div class="bc-page">
+
+  <div class="bc-topline">
+    <a class="bc-back" href="/broadcasts">← Все турниры</a>
+  </div>
+
+  <!-- Шапка турнира -->
+  <div class="bc-hero">
+    <div class="bc-hero-badge">🏆</div>
+    <h1 id="t-name">Загрузка…</h1>
+    <p id="t-meta">&nbsp;</p>
+  </div>
+
+  <!-- Админ: добавление партии в турнир -->
+  <div class="bc-admin" id="bc-admin" style="display:none">
+    <h3>Добавить партию в турнир</h3>
+    <div class="bc-grid">
+      <div class="full">
+        <label>Название партии *</label>
+        <input id="f-name" maxlength="120" placeholder="Game 1 — Gukesh D — Sindarov">
+      </div>
+      <div>
+        <label>Дата и время начала *</label>
+        <input id="f-starts" type="datetime-local">
+      </div>
+      <div>
+        <label>Ссылка на раунд Lichess</label>
+        <input id="f-url" placeholder="https://lichess.org/broadcast/.../xLgOJ6cb">
+      </div>
+      <div class="full">
+        <label>Описание</label>
+        <input id="f-desc" maxlength="500" placeholder="GM Gukesh D — GM Sindarov, Javokhir">
+      </div>
+    </div>
+    <button class="btn btn-primary" id="f-save">Создать партию</button>
+    <div class="bc-err" id="f-err"></div>
+  </div>
+
+  <!-- Админ: перенос существующей партии в этот турнир -->
+  <div class="bc-admin" id="bc-move" style="display:none">
+    <h3>Перенести партию в этот турнир</h3>
+    <div class="bc-move-row">
+      <select id="m-select"><option value="">Загрузка…</option></select>
+      <button class="btn btn-primary" id="m-go">Перенести</button>
+    </div>
+    <div class="bc-err" id="m-err"></div>
+  </div>
+
+  <div id="bc-list"><div class="bc-empty"><div class="big">📡</div>Загрузка…</div></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // /broadcasts/t/<id>
+  const ID = location.pathname.split('/')[3] || '';
+  let me = null;
+  let tournament = null;
+  let games = [];       // партии ЭТОГО турнира
+  let allGames = [];    // все партии (для формы переноса)
+
+  const STATUS_LABEL = {
+    live: 'Live', upcoming: 'Скоро', paused: 'Пауза', pending: 'Ожидание', finished: 'Финал',
+  };
+
+  function fmtTime(ms) {
+    if (!ms) return '—';
+    return new Date(ms).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function plural(n, one, few, many) {
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+    return many;
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  if (window.CH && typeof CH.initHeader === 'function') CH.initHeader();
+
+  async function loadMe() {
+    try {
+      me = await apiGet('/me');
+      if (me && window.CH && typeof CH.setCurrentUser === 'function') CH.setCurrentUser(me);
+      if (me && me.role === 'admin') {
+        document.getElementById('bc-admin').style.display = '';
+        document.getElementById('bc-move').style.display = '';
+      }
+    } catch (e) { /* не залогинен */ }
+  }
+
+  // ── загрузка турнира и его партий ──────────────────────
+  async function load() {
+    try {
+      const [tours, tournamentGames, everyGame] = await Promise.all([
+        apiGet('/broadcast-tournaments'),
+        apiGet('/broadcasts?tournament=' + encodeURIComponent(ID)),
+        apiGet('/broadcasts'),
+      ]);
+      tournament = (tours || []).find(t => t.id === ID) || null;
+      games = tournamentGames || [];
+      allGames = everyGame || [];
+    } catch (e) {
+      document.getElementById('bc-list').innerHTML =
+        '<div class="bc-empty"><div class="big">⚠️</div>Не удалось загрузить турнир</div>';
+      return;
+    }
+
+    if (!tournament) {
+      document.getElementById('t-name').textContent = 'Турнир не найден';
+      document.getElementById('t-meta').innerHTML = 'Возможно, он был удалён. <a href="/broadcasts">Вернуться к списку</a>';
+      document.getElementById('bc-list').innerHTML = '';
+      return;
+    }
+
+    renderHead();
+    renderMoveSelect();
+    renderList();
+  }
+
+  function renderHead() {
+    document.getElementById('t-name').textContent = tournament.name;
+    const gamesWord = plural(tournament.gamesCount, 'партия', 'партии', 'партий');
+    const st = STATUS_LABEL[tournament.status] || '';
+    const livePart = tournament.liveCount
+      ? ` · <span style="color:var(--red)">${tournament.liveCount} ${plural(tournament.liveCount, 'партия идёт', 'партии идут', 'партий идут')} сейчас</span>` : '';
+    document.getElementById('t-meta').innerHTML =
+      `<b style="color:var(--accent-light)">${esc(st)}</b> · ${tournament.gamesCount} ${gamesWord}${livePart} · Начало: ${fmtTime(tournament.startsAt)}` +
+      (tournament.description ? `<br>${esc(tournament.description)}` : '');
+    document.title = tournament.name + ' — Chess Home';
+  }
+
+  // ── форма переноса: партии этого турнира не предлагаем ─
+  function renderMoveSelect() {
+    const sel = document.getElementById('m-select');
+    const candidates = allGames.filter(g => g.tournamentId !== ID);
+    if (!candidates.length) {
+      sel.innerHTML = '<option value="">Нет партий вне этого турнира</option>';
+      return;
+    }
+    sel.innerHTML = '<option value="">— выберите партию —</option>' + candidates.map(g => {
+      const where = g.tournamentName ? ` [${g.tournamentName}]` : ' [без турнира]';
+      return `<option value="${esc(g.id)}">${esc(g.name)}${where}</option>`;
+    }).join('');
+  }
+
+  // ── список партий турнира ──────────────────────────────
+  function renderList() {
+    const c = document.getElementById('bc-list');
+    if (!games.length) {
+      c.innerHTML = '<div class="bc-empty"><div class="big">♟</div>В этом турнире пока нет партий' +
+        ((me && me.role === 'admin') ? '<br><br>Добавьте первую партию формой выше' : '') + '</div>';
+      return;
+    }
+
+    c.innerHTML = games.map(g => {
+      const del = (me && me.role === 'admin')
+        ? `<button class="bc-del" data-del="${g.id}" title="Удалить партию">✕</button>` : '';
+      const players = (g.white || g.black)
+        ? `<b>${esc(g.white || '—')}</b> — <b>${esc(g.black || '—')}</b>` + (g.plies ? ` <span style="color:var(--text-muted)">· ${Math.ceil(g.plies / 2)} ${plural(Math.ceil(g.plies / 2), 'ход', 'хода', 'ходов')}</span>` : '')
+        : (g.description ? esc(g.description) : '');
+      return `
+      <div class="bc-card" data-open="${g.id}">
+        <div class="bc-stripe ${esc(g.status)}"></div>
+        <div class="bc-inner">
+          <div class="bc-status-pill ${esc(g.status)}"><span class="dot"></span>${STATUS_LABEL[g.status] || ''}</div>
+          <div class="bc-main">
+            <div class="bc-name">${esc(g.name)}</div>
+            ${players ? `<div class="bc-players">${players}</div>` : ''}
+            <div class="bc-meta">Начало: ${fmtTime(g.startsAt)}</div>
+          </div>
+          <div class="bc-right">
+            ${g.status === 'finished' && g.result ? `<div class="bc-result">${esc(g.result)}</div>` : ''}
+          </div>
+          ${del}
+        </div>
+      </div>`;
+    }).join('');
+
+    c.querySelectorAll('[data-open]').forEach(el => {
+      el.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-del]')) return;
+        location.href = '/broadcasts/' + el.getAttribute('data-open');
+      });
+    });
+    c.querySelectorAll('[data-del]').forEach(el => {
+      el.addEventListener('click', async () => {
+        if (!confirm('Удалить партию из турнира?')) return;
+        try { await apiPost('/broadcasts/' + el.getAttribute('data-del') + '/delete', {}); load(); }
+        catch (e) { alert(e.message); }
+      });
+    });
+  }
+
+  // ── создание партии внутри турнира ─────────────────────
+  async function create() {
+    const err = document.getElementById('f-err');
+    err.textContent = '';
+    const name = document.getElementById('f-name').value.trim();
+    const startsRaw = document.getElementById('f-starts').value;
+    const url = document.getElementById('f-url').value.trim();
+    const desc = document.getElementById('f-desc').value.trim();
+    if (!name) { err.textContent = 'Укажите название'; return; }
+    if (!startsRaw) { err.textContent = 'Укажите дату и время'; return; }
+    const startsAt = new Date(startsRaw).getTime();
+    try {
+      await apiPost('/broadcasts', {
+        name, startsAt,
+        sourceUrl: url || undefined,
+        description: desc || undefined,
+        tournamentId: ID,
+      });
+      document.getElementById('f-name').value = '';
+      document.getElementById('f-url').value = '';
+      document.getElementById('f-desc').value = '';
+      load();
+    } catch (e) { err.textContent = e.message; }
+  }
+
+  document.getElementById('f-save').addEventListener('click', create);
+
+  // ── перенос существующей партии ────────────────────────
+  document.getElementById('m-go').addEventListener('click', async () => {
+    const err = document.getElementById('m-err');
+    err.textContent = '';
+    const sel = document.getElementById('m-select');
+    const bid = sel.value;
+    if (!bid) { err.textContent = 'Выберите партию'; return; }
+    try {
+      await apiPost('/broadcasts/' + encodeURIComponent(bid) + '/set-tournament', { tournamentId: ID });
+      load();
+    } catch (e) { err.textContent = e.message; }
+  });
+
+  loadMe();
+  load();
+  setInterval(() => { if (!document.hidden) load(); }, 10000);
+})();
+</script>
+
+</body>
+</html>

@@ -55,7 +55,7 @@
   .bc-tab.active { background: var(--accent); border-color: var(--accent); color: #161820; }
   .bc-tab .cnt { opacity: .75; font-weight: 500; margin-left: 4px; }
 
-  /* ── CARD ─────────────────────────────────────────────── */
+  /* ── CARD (турниры и партии без турнира) ──────────────── */
   .bc-card {
     display: flex; align-items: stretch; gap: 0;
     background: var(--bg-card); border: 1px solid var(--border);
@@ -114,6 +114,15 @@
   }
   .bc-del:hover { border-color: var(--red); color: var(--red); background: rgba(224,85,85,.08); }
 
+  /* ── секция «партии без турнира» ──────────────────────── */
+  .bc-section {
+    display: flex; align-items: baseline; gap: 10px;
+    margin: 30px 0 12px; color: var(--text-secondary);
+    font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;
+  }
+  .bc-section::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .bc-section .hint { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-muted); font-size: 12px; }
+
   .bc-empty {
     text-align: center; padding: 70px 20px; color: var(--text-secondary); font-size: 15px;
     border: 1px dashed var(--border-light); border-radius: var(--radius); background: rgba(30,32,40,.4);
@@ -143,6 +152,8 @@
   .bc-admin input:focus { outline: none; border-color: var(--accent-dark); box-shadow: 0 0 0 3px rgba(201,168,76,.1); }
   .bc-admin .btn { margin-top: 16px; }
   .bc-err { color: var(--red); font-size: 13px; margin-top: 10px; min-height: 16px; }
+  .bc-admin .bc-note { color: var(--text-muted); font-size: 12px; margin-top: 10px; }
+  .bc-admin .bc-note a { color: var(--accent); }
 
   @media (max-width: 640px) {
     .bc-hero h1 { font-size: 28px; }
@@ -163,32 +174,29 @@
   <div class="bc-hero">
     <div class="bc-hero-badge">📡</div>
     <h1>Шахматные <span>Трансляции</span></h1>
-    <p>Соревнования в реальном времени — партии обновляются автоматически</p>
+    <p>Турниры в реальном времени — ходы партий обновляются автоматически</p>
   </div>
 
-  <!-- Админ: добавление трансляции -->
+  <!-- Админ: создание турнира -->
   <div class="bc-admin" id="bc-admin" style="display:none">
-    <h3>Новая трансляция</h3>
+    <h3>Новый турнир</h3>
     <div class="bc-grid">
       <div class="full">
         <label>Название *</label>
-        <input id="f-name" maxlength="120" placeholder="FIDE World Chess Championship 2026 — Game 1">
+        <input id="f-name" maxlength="120" placeholder="FIDE World Chess Championship 2026">
       </div>
       <div>
         <label>Дата и время начала *</label>
         <input id="f-starts" type="datetime-local">
       </div>
-      <div>
-        <label>Ссылка на раунд Lichess</label>
-        <input id="f-url" placeholder="https://lichess.org/broadcast/.../xLgOJ6cb">
-      </div>
       <div class="full">
         <label>Описание</label>
-        <input id="f-desc" maxlength="500" placeholder="Матч на звание чемпиона мира">
+        <input id="f-desc" maxlength="500" placeholder="Матч на звание чемпиона мира, Гата Кимски">
       </div>
     </div>
-    <button class="btn btn-primary" id="f-save">Создать трансляцию</button>
+    <button class="btn btn-primary" id="f-save">Создать турнир</button>
     <div class="bc-err" id="f-err"></div>
+    <div class="bc-note">Партии добавляются внутри турнира: откройте его и воспользуйтесь формой «Добавить партию».</div>
   </div>
 
   <!-- TABS -->
@@ -207,7 +215,8 @@
   'use strict';
 
   let me = null;
-  let allList = [];
+  let tournaments = [];   // список турниров из API
+  let looseGames = [];    // партии без турнира (для переноса/просмотра)
   let filter = 'all';
 
   const STATUS_LABEL = {
@@ -219,11 +228,11 @@
     return new Date(ms).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   }
 
-  function moveWord(n) {
+  function plural(n, one, few, many) {
     const m10 = n % 10, m100 = n % 100;
-    if (m10 === 1 && m100 !== 11) return 'ход';
-    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return 'хода';
-    return 'ходов';
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+    return many;
   }
 
   function esc(s) {
@@ -250,10 +259,16 @@
     renderList();
   });
 
-  // ── список ─────────────────────────────────────────────
+  // ── загрузка ───────────────────────────────────────────
   async function load() {
-    try { allList = await apiGet('/broadcasts'); }
-    catch (e) {
+    try {
+      const [tours, games] = await Promise.all([
+        apiGet('/broadcast-tournaments'),
+        apiGet('/broadcasts'),
+      ]);
+      tournaments = tours || [];
+      looseGames = (games || []).filter(g => !g.tournamentId);
+    } catch (e) {
       document.getElementById('bc-list').innerHTML =
         '<div class="bc-empty"><div class="big">⚠️</div>Не удалось загрузить список</div>';
       return;
@@ -263,84 +278,142 @@
   }
 
   function updateTabs() {
-    if (!allList.length) return;
+    if (!tournaments.length) return;
     document.getElementById('bc-tabs').style.display = '';
-    const cnt = (f) => allList.filter(b => (f === 'all') ? true : (f === 'live' ? (b.status === 'live' || b.status === 'paused') : b.status === f)).length;
-    document.getElementById('cnt-all').textContent = allList.length || '';
+    const cnt = (f) => tournaments.filter(t => (f === 'all') ? true : (f === 'live' ? (t.status === 'live' || t.status === 'paused') : t.status === f)).length;
+    document.getElementById('cnt-all').textContent = tournaments.length || '';
     document.getElementById('cnt-live').textContent = cnt('live') || '';
     document.getElementById('cnt-upcoming').textContent = cnt('upcoming') || '';
     document.getElementById('cnt-finished').textContent = cnt('finished') || '';
   }
 
+  // ── карточка турнира ───────────────────────────────────
+  function tournamentCard(t) {
+    const del = (me && me.role === 'admin')
+      ? `<button class="bc-del" data-del="${t.id}" title="Удалить турнир">✕</button>` : '';
+    const gamesWord = plural(t.gamesCount, 'партия', 'партии', 'партий');
+    const players = (t.players && (t.players.white || t.players.black))
+      ? `<b>${esc(t.players.white || '—')}</b> — <b>${esc(t.players.black || '—')}</b>`
+      : (t.description ? esc(t.description) : '');
+    const livePart = t.liveCount
+      ? ` <span style="color:var(--red)">· ${t.liveCount} ${plural(t.liveCount, 'идёт', 'идут', 'идут')} сейчас</span>` : '';
+    return `
+    <div class="bc-card" data-open="${t.id}">
+      <div class="bc-stripe ${esc(t.status)}"></div>
+      <div class="bc-inner">
+        <div class="bc-status-pill ${esc(t.status)}"><span class="dot"></span>${STATUS_LABEL[t.status] || ''}</div>
+        <div class="bc-main">
+          <div class="bc-name">🏆 ${esc(t.name)}</div>
+          ${players ? `<div class="bc-players">${players}</div>` : ''}
+          <div class="bc-meta">${t.gamesCount} ${gamesWord}${livePart} · Начало: ${fmtTime(t.startsAt)}</div>
+        </div>
+        <div class="bc-right">
+          ${t.status === 'finished' ? `<div class="bc-result">${t.finishedCount}/${t.gamesCount}</div>` : ''}
+        </div>
+        ${del}
+      </div>
+    </div>`;
+  }
+
+  // ── карточка партии без турнира (старый вид) ───────────
+  function gameCard(g) {
+    const del = (me && me.role === 'admin')
+      ? `<button class="bc-del" data-del-game="${g.id}" title="Удалить партию">✕</button>` : '';
+    const players = (g.white || g.black)
+      ? `<b>${esc(g.white || '—')}</b> — <b>${esc(g.black || '—')}</b>` + (g.plies ? ` <span style="color:var(--text-muted)">· ${Math.ceil(g.plies / 2)} ${plural(Math.ceil(g.plies / 2), 'ход', 'хода', 'ходов')}</span>` : '')
+      : (g.description ? esc(g.description) : '');
+    return `
+    <div class="bc-card" data-open-game="${g.id}">
+      <div class="bc-stripe ${esc(g.status)}"></div>
+      <div class="bc-inner">
+        <div class="bc-status-pill ${esc(g.status)}"><span class="dot"></span>${STATUS_LABEL[g.status] || ''}</div>
+        <div class="bc-main">
+          <div class="bc-name">${esc(g.name)}</div>
+          ${players ? `<div class="bc-players">${players}</div>` : ''}
+          <div class="bc-meta">Начало: ${fmtTime(g.startsAt)}</div>
+        </div>
+        <div class="bc-right">
+          ${g.status === 'finished' && g.result ? `<div class="bc-result">${esc(g.result)}</div>` : ''}
+        </div>
+        ${del}
+      </div>
+    </div>`;
+  }
+
   function renderList() {
     const c = document.getElementById('bc-list');
-    const list = allList.filter(b => (filter === 'all') ? true : (filter === 'live' ? (b.status === 'live' || b.status === 'paused') : b.status === filter));
+    const list = tournaments.filter(t => (filter === 'all') ? true : (filter === 'live' ? (t.status === 'live' || t.status === 'paused') : t.status === filter));
+    const loose = looseGames.filter(g => (filter === 'all') ? true : (filter === 'live' ? (g.status === 'live' || g.status === 'paused') : g.status === filter));
 
-    if (!allList.length) {
-      c.innerHTML = '<div class="bc-empty"><div class="big">♟</div>Пока нет ни одной трансляции</div>';
+    if (!tournaments.length && !looseGames.length) {
+      c.innerHTML = '<div class="bc-empty"><div class="big">♟</div>Пока нет ни одного турнира</div>';
       return;
     }
-    if (!list.length) {
+    if (!list.length && !loose.length) {
       c.innerHTML = '<div class="bc-empty"><div class="big">🔍</div>В этой категории ничего нет</div>';
       return;
     }
 
-    c.innerHTML = list.map(b => {
-      const del = (me && me.role === 'admin')
-        ? `<button class="bc-del" data-del="${b.id}" title="Удалить">✕</button>` : '';
-      const players = (b.white || b.black)
-        ? `<b>${esc(b.white || '—')}</b> — <b>${esc(b.black || '—')}</b>` + (b.plies ? ` <span style="color:var(--text-muted)">· ${Math.ceil(b.plies / 2)} ${moveWord(Math.ceil(b.plies / 2))}</span>` : '')
-        : (b.description ? esc(b.description) : '');
-      return `
-      <div class="bc-card" data-open="${b.id}">
-        <div class="bc-stripe ${esc(b.status)}"></div>
-        <div class="bc-inner">
-          <div class="bc-status-pill ${esc(b.status)}"><span class="dot"></span>${STATUS_LABEL[b.status] || ''}</div>
-          <div class="bc-main">
-            <div class="bc-name">${esc(b.name)}</div>
-            ${players ? `<div class="bc-players">${players}</div>` : ''}
-            <div class="bc-meta">Начало: ${fmtTime(b.startsAt)}</div>
-          </div>
-          <div class="bc-right">
-            ${b.status === 'finished' && b.result ? `<div class="bc-result">${esc(b.result)}</div>` : ''}
-          </div>
-          ${del}
-        </div>
-      </div>`;
-    }).join('');
+    let html = list.map(tournamentCard).join('');
+
+    // партии, не привязанные ни к одному турниру (например, созданные
+    // до обновления) — показываем отдельной секцией, админ может
+    // перенести их в турнир со страницы турнира.
+    if (loose.length) {
+      const hint = (me && me.role === 'admin')
+        ? ' <span class="hint">— перенесите их в турнир со страницы турнира</span>' : '';
+      html += `<div class="bc-section">Партии без турнира${hint}</div>` + loose.map(gameCard).join('');
+    }
+
+    c.innerHTML = html;
 
     c.querySelectorAll('[data-open]').forEach(el => {
       el.addEventListener('click', (ev) => {
         if (ev.target.closest('[data-del]')) return;
-        location.href = '/broadcasts/' + el.getAttribute('data-open');
+        location.href = '/broadcasts/t/' + el.getAttribute('data-open');
+      });
+    });
+    c.querySelectorAll('[data-open-game]').forEach(el => {
+      el.addEventListener('click', (ev) => {
+        if (ev.target.closest('[data-del-game]')) return;
+        location.href = '/broadcasts/' + el.getAttribute('data-open-game');
       });
     });
     c.querySelectorAll('[data-del]').forEach(el => {
       el.addEventListener('click', async () => {
-        if (!confirm('Удалить трансляцию?')) return;
-        try { await apiPost('/broadcasts/' + el.getAttribute('data-del') + '/delete', {}); load(); }
+        const t = tournaments.find(x => x.id === el.getAttribute('data-del'));
+        const n = t ? t.gamesCount : 0;
+        if (!confirm(`Удалить турнир${t ? ' «' + t.name + '»' : ''} вместе со всеми его партиями (${n})?`)) return;
+        try { await apiPost('/broadcast-tournaments/' + el.getAttribute('data-del') + '/delete', {}); load(); }
+        catch (e) { alert(e.message); }
+      });
+    });
+    c.querySelectorAll('[data-del-game]').forEach(el => {
+      el.addEventListener('click', async () => {
+        if (!confirm('Удалить партию?')) return;
+        try { await apiPost('/broadcasts/' + el.getAttribute('data-del-game') + '/delete', {}); load(); }
         catch (e) { alert(e.message); }
       });
     });
   }
 
-  // ── создание ───────────────────────────────────────────
+  // ── создание турнира ───────────────────────────────────
   async function create() {
     const err = document.getElementById('f-err');
     err.textContent = '';
     const name = document.getElementById('f-name').value.trim();
     const startsRaw = document.getElementById('f-starts').value;
-    const url = document.getElementById('f-url').value.trim();
     const desc = document.getElementById('f-desc').value.trim();
     if (!name) { err.textContent = 'Укажите название'; return; }
     if (!startsRaw) { err.textContent = 'Укажите дату и время'; return; }
     const startsAt = new Date(startsRaw).getTime();
     try {
-      await apiPost('/broadcasts', { name, startsAt, sourceUrl: url || undefined, description: desc || undefined });
+      const r = await apiPost('/broadcast-tournaments', { name, startsAt, description: desc || undefined });
       document.getElementById('f-name').value = '';
-      document.getElementById('f-url').value = '';
       document.getElementById('f-desc').value = '';
-      load();
+      // сразу переходим на страницу турнира — туда удобно добавлять партии
+      if (r && r.id) location.href = '/broadcasts/t/' + r.id;
+      else load();
     } catch (e) { err.textContent = e.message; }
   }
 

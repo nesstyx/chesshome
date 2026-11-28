@@ -288,7 +288,7 @@
 
 <div class="bc-page">
   <div class="bc-topline">
-    <a class="bc-back" href="/broadcasts">← Все трансляции</a>
+    <a class="bc-back" id="bc-back" href="/broadcasts">← Все турниры</a>
     <select id="game-select" style="display:none"></select>
   </div>
 
@@ -468,13 +468,19 @@
 
   // ── локальный вариант зрителя ──────────────────────────────────
   // Зритель может двигать фигуры — ходы остаются ТОЛЬКО у него на доске.
-  // Вариант определяется тем, что FEN основной линии доски (getFEN)
-  // отличается от финального FEN трансляции.
+  // Вариант определяется сравнением ИСТОРИИ ХОДОВ доски с линией трансляции
+  // (varStartIdx): расхождение хотя бы на одном ходу — значит вариант.
+  // Раньше сравнивался FEN доски с финальным FEN свежего PGN — но в момент
+  // прихода нового хода доска на мгновение отстаёт от PGN, FEN не совпадал,
+  // «вариант» включался ошибочно: доска замирала и требовался клик по кнопке
+  // «есть новые ходы». Теперь просто отстающая доска вариантом НЕ считается
+  // и новые ходы применяются автоматически.
   function varMode() {
     if (preview || !boardSynced) return false;
     const g = games[gameIdx];
     if (!g || !g.fens.length) return false;
-    return cb().getFEN() !== g.fens[Math.min(g.hist.length, g.fens.length - 1)];
+    const h = cb().history || [];
+    return varStartIdx(h, g) < h.length;
   }
 
   // индекс первого хода в локальной истории, которого нет в трансляции
@@ -867,6 +873,16 @@
     if (!data) return;
     $('bc-name').textContent = data.name || 'Трансляция';
 
+    // «Назад» — на страницу турнира, если партия в нём состоит
+    const back = $('bc-back');
+    if (data.tournamentId) {
+      back.href = '/broadcasts/t/' + encodeURIComponent(data.tournamentId);
+      back.textContent = '← К турниру';
+    } else {
+      back.href = '/broadcasts';
+      back.textContent = '← Все турниры';
+    }
+
     const badge = $('bc-badge');
     badge.className = 'bc-badge ' + data.status;
     badge.textContent = data.status === 'live' ? '● Live'
@@ -898,6 +914,7 @@
     $('bc-info').innerHTML =
       '<h4>О трансляции</h4>' +
       (ev ? '<b>' + esc(ev) + '</b><br>' : '') +
+      (data.tournamentId && data.tournamentName ? 'Турнир: <a href="/broadcasts/t/' + esc(data.tournamentId) + '">' + esc(data.tournamentName) + '</a><br>' : '') +
       (data.description ? esc(data.description) + '<br>' : '') +
       (data.sourceUrl ? 'Источник: <a href="' + esc(data.sourceUrl) + '" target="_blank" rel="noopener">lichess.org</a><br>' : '') +
       (open ? 'Дебют: ' + esc(open) + '<br>' : '') +
